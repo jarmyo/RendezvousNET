@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    MeetingDashboardPage — .NET MAUI
+    ─────────────────────────────────────────────────────────────────────────────
+    Layout: Header (fixed) + CollectionView (scrollable participant list)
+
+    Status circle colors (updated in real-time via SignalR):
+      • Gray   (#94A3B8) — Pending / On the way
+      • Green  (#22C55E) — "I'm at the venue"
+      • Yellow (#EAB308) — "I'm running late" (shares temporary GPS location)
+      • Red    (#EF4444) — Emergency 🚨
+    ─────────────────────────────────────────────────────────────────────────────
+-->
+<ContentPage
+    x:Class="RendezvousNET.Mobile.Views.MeetingDashboardPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:RendezvousNET.Mobile.ViewModels"
+    xmlns:enums="clr-namespace:RendezvousNET.Shared.Enums;assembly=RendezvousNET.Shared"
+    Title="{Binding MeetingTitle}"
+    BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0F172A}">
+
+    <ContentPage.BindingContext>
+        <vm:MeetingDashboardViewModel />
+    </ContentPage.BindingContext>
+
+    <!-- Root layout: header stays fixed, list scrolls independently -->
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 0 — FIXED HEADER
+             Contains: Host name, Location, Scheduled time, Live timer
+             ═══════════════════════════════════════════════════════════ -->
+        <Frame
+            Grid.Row="0"
+            BackgroundColor="{AppThemeBinding Light=#1E293B, Dark=#0F172A}"
+            Padding="16"
+            CornerRadius="0"
+            HasShadow="True">
+
+            <VerticalStackLayout Spacing="8">
+
+                <!-- Meeting title -->
+                <Label
+                    Text="{Binding MeetingTitle}"
+                    FontSize="20"
+                    FontAttributes="Bold"
+                    TextColor="#F1F5F9" />
+
+                <!-- Host name -->
+                <Label
+                    FontSize="13"
+                    TextColor="#94A3B8">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Hosted by " TextColor="#94A3B8" />
+                            <Span Text="{Binding HostDisplayName}" TextColor="#CBD5E1" FontAttributes="Bold" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+
+                <!-- Location + Scheduled time row -->
+                <HorizontalStackLayout Spacing="12">
+
+                    <Frame
+                        BackgroundColor="#334155"
+                        Padding="6,4"
+                        CornerRadius="6"
+                        HasShadow="False">
+                        <Label
+                            Text="{Binding Location, StringFormat='📍 {0}'}"
+                            FontSize="12"
+                            TextColor="#CBD5E1" />
+                    </Frame>
+
+                    <Frame
+                        BackgroundColor="#334155"
+                        Padding="6,4"
+                        CornerRadius="6"
+                        HasShadow="False">
+                        <Label
+                            Text="{Binding ScheduledAtFormatted, StringFormat='🕐 {0}'}"
+                            FontSize="12"
+                            TextColor="#CBD5E1" />
+                    </Frame>
+
+                </HorizontalStackLayout>
+
+                <!-- Live countdown timer -->
+                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                    <Label
+                        Text="Time until meeting:"
+                        FontSize="12"
+                        TextColor="#64748B" />
+                    <Label
+                        Text="{Binding CountdownDisplay}"
+                        FontSize="16"
+                        FontAttributes="Bold"
+                        TextColor="{Binding CountdownColor}"
+                        FontFamily="Monospace" />
+                </HorizontalStackLayout>
+
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             ROW 1 — SCROLLABLE PARTICIPANT LIST (CollectionView)
+             Each card: [Status Circle] [Name + Type] [Status Label]
+             ═══════════════════════════════════════════════════════════ -->
+        <RefreshView
+            Grid.Row="1"
+            IsRefreshing="{Binding IsRefreshing}"
+            Command="{Binding RefreshCommand}">
+
+            <CollectionView
+                ItemsSource="{Binding Participants}"
+                EmptyView="No participants have joined yet."
+                SelectionMode="None">
+
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout
+                        Orientation="Vertical"
+                        ItemSpacing="8" />
+                </CollectionView.ItemsLayout>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <!-- Participant card -->
+                        <Frame
+                            Margin="12,4"
+                            Padding="12,10"
+                            CornerRadius="10"
+                            HasShadow="True"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1E293B}">
+
+                            <Grid
+                                ColumnDefinitions="24,*,Auto"
+                                ColumnSpacing="12"
+                                VerticalOptions="Center">
+
+                                <!-- STATUS CIRCLE — color driven by ParticipantStatus enum -->
+                                <Ellipse
+                                    Grid.Column="0"
+                                    WidthRequest="18"
+                                    HeightRequest="18"
+                                    VerticalOptions="Center"
+                                    Fill="{Binding StatusColor}" />
+
+                                <!-- Participant name + type -->
+                                <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                    <Label
+                                        Text="{Binding DisplayName}"
+                                        FontSize="15"
+                                        FontAttributes="Bold"
+                                        TextColor="{AppThemeBinding Light=#1E293B, Dark=#F1F5F9}" />
+                                    <Label
+                                        Text="{Binding ParticipantTypeLabel}"
+                                        FontSize="11"
+                                        TextColor="#94A3B8"
+                                        IsVisible="{Binding IsAnonymousGuest}" />
+                                </VerticalStackLayout>
+
+                                <!-- Status description label -->
+                                <Label
+                                    Grid.Column="2"
+                                    Text="{Binding StatusLabel}"
+                                    FontSize="12"
+                                    TextColor="#64748B"
+                                    VerticalOptions="Center" />
+
+                            </Grid>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+            </CollectionView>
+        </RefreshView>
+
+    </Grid>
+</ContentPage>

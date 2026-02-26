@@ -1,0 +1,6 @@
+@RendezvousNET.Api_HostAddress = http://localhost:5082
+
+GET {{RendezvousNET.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
