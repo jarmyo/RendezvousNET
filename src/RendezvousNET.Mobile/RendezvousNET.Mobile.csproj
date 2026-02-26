@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Note: Set to net9.0-android;net9.0-ios;net9.0-maccatalyst;net9.0-windows10.0.19041.0 when MAUI workload is installed -->
+    <!-- <TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst;net9.0-windows10.0.19041.0</TargetFrameworks> -->
+    <!-- <UseMaui>true</UseMaui> -->
+    <RootNamespace>RendezvousNET.Mobile</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RendezvousNET.Shared\RendezvousNET.Shared.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
+  </ItemGroup>
+</Project>

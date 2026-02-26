@@ -1,0 +1,71 @@
+/* Meeting Status Page Styles - Zero advertising */
+.meeting-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 0 0 1rem 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.meeting-header h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+.host-name { opacity: 0.85; margin: 0 0 1rem; }
+
+.meeting-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.9rem;
+}
+
+.location, .scheduled-time, .timer {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(255,255,255,0.1);
+    padding: 0.4rem 0.8rem;
+    border-radius: 1rem;
+}
+
+.timer-late { background: rgba(239, 68, 68, 0.3) !important; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+.participants-list { padding: 1rem; }
+.participants-list h2 { font-size: 1.1rem; color: #374151; margin-bottom: 1rem; }
+
+.participant-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.6rem;
+    background: white;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: box-shadow 0.2s;
+}
+.participant-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+.status-circle {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background-color 0.4s ease;
+}
+.status-gray   { background-color: #9ca3af; }
+.status-green  { background-color: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
+.status-yellow { background-color: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.5); }
+.status-red    { background-color: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.5); animation: pulse 0.8s infinite; }
+
+.participant-info { display: flex; flex-direction: column; gap: 0.2rem; }
+.participant-name { font-weight: 600; color: #111827; }
+.anonymous-badge { font-size: 0.75rem; color: #6b7280; }
+.status-label { font-size: 0.8rem; font-weight: 500; }
+.status-label.status-green  { color: #16a34a; }
+.status-label.status-yellow { color: #a16207; }
+.status-label.status-red    { color: #dc2626; }
+.status-label.status-gray   { color: #6b7280; }
+
+.loading-container { display: flex; flex-direction: column; align-items: center; padding: 3rem; gap: 1rem; }
+.spinner { width: 3rem; height: 3rem; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    MAUI Dashboard Page - Requires MAUI workload to compile.
+    Enable by installing MAUI workload and updating the .csproj TargetFrameworks.
+-->
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:RendezvousNET.Mobile.ViewModels"
+             xmlns:dto="clr-namespace:RendezvousNET.Shared.DTOs;assembly=RendezvousNET.Shared"
+             x:Class="RendezvousNET.Mobile.Pages.MeetingDashboardPage"
+             x:DataType="vm:MeetingDashboardViewModel"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="{AppThemeBinding Light=#F3F4F6, Dark=#111827}">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ROW 0: FIXED HEADER - Host info, Location, Time, Global Timer -->
+        <Frame Grid.Row="0"
+               BackgroundColor="{AppThemeBinding Light=#1a1a2e, Dark=#0d1117}"
+               CornerRadius="0"
+               Padding="16,48,16,16"
+               HasShadow="True">
+            <VerticalStackLayout Spacing="8">
+
+                <Label Text="{Binding Meeting.Title}"
+                       FontSize="22"
+                       FontAttributes="Bold"
+                       TextColor="White" />
+
+                <Label TextColor="#CBD5E1" FontSize="14">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Anfitrión: " />
+                            <Span Text="{Binding Meeting.HostName}" FontAttributes="Bold" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+
+                <FlexLayout Wrap="Wrap" JustifyContent="Start" Gap="8">
+
+                    <Frame BackgroundColor="#FFFFFF20" CornerRadius="20" Padding="10,5" HasShadow="False">
+                        <HorizontalStackLayout Spacing="6">
+                            <Label Text="📍" FontSize="14" VerticalOptions="Center" />
+                            <Label Text="{Binding Meeting.Location}"
+                                   TextColor="White" FontSize="13"
+                                   VerticalOptions="Center"
+                                   MaxLines="1"
+                                   LineBreakMode="TailTruncation" />
+                        </HorizontalStackLayout>
+                    </Frame>
+
+                    <Frame BackgroundColor="#FFFFFF20" CornerRadius="20" Padding="10,5" HasShadow="False">
+                        <HorizontalStackLayout Spacing="6">
+                            <Label Text="🕐" FontSize="14" VerticalOptions="Center" />
+                            <Label Text="{Binding ScheduledAtDisplay}"
+                                   TextColor="White" FontSize="13"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </Frame>
+
+                    <Frame BackgroundColor="{Binding TimerChipColor}" CornerRadius="20" Padding="10,5" HasShadow="False">
+                        <HorizontalStackLayout Spacing="6">
+                            <Label Text="⏱" FontSize="14" VerticalOptions="Center" />
+                            <Label Text="{Binding TimerDisplay}"
+                                   TextColor="White" FontSize="14"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </Frame>
+
+                </FlexLayout>
+
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- ROW 1: SCROLLABLE LIST - One card per participant with status circles -->
+        <RefreshView Grid.Row="1"
+                     Command="{Binding RefreshCommand}"
+                     IsRefreshing="{Binding IsRefreshing}">
+
+            <CollectionView ItemsSource="{Binding Participants}"
+                            SelectionMode="None"
+                            Margin="0,8,0,0">
+
+                <CollectionView.Header>
+                    <Label Text="{Binding ParticipantCountLabel}"
+                           Margin="16,8,16,4"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                </CollectionView.Header>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="dto:MeetingParticipantDto">
+                        <Frame Margin="12,4"
+                               Padding="14,12"
+                               CornerRadius="12"
+                               HasShadow="True"
+                               BackgroundColor="{AppThemeBinding Light=White, Dark=#1F2937}">
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+
+                                <Ellipse Grid.Column="0"
+                                         WidthRequest="22"
+                                         HeightRequest="22"
+                                         VerticalOptions="Center"
+                                         Fill="{Binding Status, Converter={StaticResource StatusToColorConverter}}" />
+
+                                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                    <Label Text="{Binding DisplayName}"
+                                           FontSize="16"
+                                           FontAttributes="Bold"
+                                           TextColor="{AppThemeBinding Light=#111827, Dark=#F9FAFB}" />
+                                    <Label Text="{Binding Status, Converter={StaticResource StatusToLabelConverter}}"
+                                           FontSize="12"
+                                           TextColor="{Binding Status, Converter={StaticResource StatusToTextColorConverter}}" />
+                                    <Label Text="Invitado Anónimo ⚠️"
+                                           FontSize="11"
+                                           TextColor="#9CA3AF"
+                                           IsVisible="{Binding IsAnonymous}" />
+                                </VerticalStackLayout>
+
+                                <Label Grid.Column="2"
+                                       Text="🆘"
+                                       FontSize="20"
+                                       VerticalOptions="Center"
+                                       IsVisible="{Binding Status, Converter={StaticResource IsEmergencyConverter}}" />
+
+                            </Grid>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Margin="0,40" Spacing="12">
+                        <Label Text="👥" FontSize="48" HorizontalOptions="Center" />
+                        <Label Text="Aún no hay invitados" FontSize="16" TextColor="#9CA3AF" HorizontalOptions="Center" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+
+            </CollectionView>
+        </RefreshView>
+
+    </Grid>
+</ContentPage>
