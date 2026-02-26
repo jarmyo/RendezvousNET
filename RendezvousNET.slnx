@@ -1,2 +1,11 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RendezvousNET.Shared/RendezvousNET.Shared.csproj" />
+    <Project Path="src/RendezvousNET.Domain/RendezvousNET.Domain.csproj" />
+    <Project Path="src/RendezvousNET.Application/RendezvousNET.Application.csproj" />
+    <Project Path="src/RendezvousNET.Infrastructure/RendezvousNET.Infrastructure.csproj" />
+    <Project Path="src/RendezvousNET.Api/RendezvousNET.Api.csproj" />
+    <Project Path="src/RendezvousNET.Web/RendezvousNET.Web.csproj" />
+    <Project Path="src/RendezvousNET.Mobile/RendezvousNET.Mobile.csproj" />
+  </Folder>
 </Solution>
