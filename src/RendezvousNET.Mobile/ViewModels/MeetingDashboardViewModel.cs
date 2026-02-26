@@ -59,7 +59,7 @@ public class MeetingDashboardViewModel : INotifyPropertyChanged, IAsyncDisposabl
 
     public MeetingDashboardViewModel()
     {
-        RefreshCommand = new RelayCommand(async () => await RefreshAsync());
+        RefreshCommand = new RelayCommand(RefreshAsync);
     }
 
     public async Task InitializeAsync(MeetingDto meeting, string hubUrl)
