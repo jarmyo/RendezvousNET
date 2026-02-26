@@ -1,0 +1,143 @@
+@page "/meeting/{InviteCode}"
+@using Microsoft.AspNetCore.SignalR.Client
+@using RendezvousNET.Shared.DTOs
+@using RendezvousNET.Shared.Enums
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@implements IAsyncDisposable
+
+<PageTitle>Rendezvous - Estado de Cita</PageTitle>
+
+@if (_meeting is null)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Cargando información de la cita...</p>
+    </div>
+}
+else
+{
+    <header class="meeting-header">
+        <div class="host-info">
+            <h1>@_meeting.Title</h1>
+            <p class="host-name">Anfitrión: <strong>@_meeting.HostName</strong></p>
+        </div>
+        <div class="meeting-meta">
+            <div class="location">
+                <span class="icon">📍</span>
+                <span>@_meeting.Location</span>
+            </div>
+            <div class="scheduled-time">
+                <span class="icon">🕐</span>
+                <span>@_meeting.ScheduledAt.ToLocalTime().ToString("ddd dd MMM, HH:mm")</span>
+            </div>
+            <div class="timer @(_isLate ? "timer-late" : "")">
+                <span class="icon">⏱</span>
+                <span>@_timerDisplay</span>
+            </div>
+        </div>
+    </header>
+
+    <section class="participants-list">
+        <h2>Invitados (@_meeting.Participants.Count)</h2>
+        @foreach (var participant in _meeting.Participants)
+        {
+            <div class="participant-card">
+                <div class="status-circle @GetStatusClass(participant.Status)"
+                     title="@GetStatusLabel(participant.Status)">
+                </div>
+                <div class="participant-info">
+                    <span class="participant-name">@participant.DisplayName</span>
+                    @if (participant.IsAnonymous)
+                    {
+                        <span class="anonymous-badge">Invitado Anónimo ⚠️</span>
+                    }
+                    <span class="status-label @GetStatusClass(participant.Status)">
+                        @GetStatusLabel(participant.Status)
+                    </span>
+                </div>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string InviteCode { get; set; } = string.Empty;
+
+    private MeetingDto? _meeting;
+    private HubConnection? _hubConnection;
+    private System.Threading.Timer? _clockTimer;
+    private string _timerDisplay = "--:--";
+    private bool _isLate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _meeting = await Http.GetFromJsonAsync<MeetingDto>($"api/meetings/by-code/{InviteCode}");
+
+        if (_meeting is not null)
+        {
+            await ConnectToSignalRAsync();
+            StartTimer();
+        }
+    }
+
+    private async Task ConnectToSignalRAsync()
+    {
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/meeting-status"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<ParticipantStatusUpdatedDto>("ParticipantStatusUpdated", update =>
+        {
+            var participant = _meeting?.Participants.FirstOrDefault(p => p.Id == update.ParticipantId);
+            if (participant is not null)
+            {
+                participant.Status = update.Status;
+                participant.CurrentLatitude = update.CurrentLatitude;
+                participant.CurrentLongitude = update.CurrentLongitude;
+                InvokeAsync(StateHasChanged);
+            }
+        });
+
+        await _hubConnection.StartAsync();
+        await _hubConnection.SendAsync("JoinMeetingGroup", _meeting!.Id.ToString());
+    }
+
+    private void StartTimer()
+    {
+        _clockTimer = new System.Threading.Timer(_ =>
+        {
+            if (_meeting is null) return;
+            var diff = _meeting.ScheduledAt - DateTimeOffset.UtcNow;
+            _isLate = diff.TotalSeconds < 0;
+            _timerDisplay = _isLate
+                ? $"+{Math.Abs((int)diff.TotalMinutes):D2}:{Math.Abs(diff.Seconds):D2}"
+                : $"{(int)diff.TotalMinutes:D2}:{diff.Seconds:D2}";
+            InvokeAsync(StateHasChanged);
+        }, null, 0, 1000);
+    }
+
+    private static string GetStatusClass(ParticipantStatus status) => status switch
+    {
+        ParticipantStatus.Arrived   => "status-green",
+        ParticipantStatus.Delayed   => "status-yellow",
+        ParticipantStatus.Emergency => "status-red",
+        _                           => "status-gray"
+    };
+
+    private static string GetStatusLabel(ParticipantStatus status) => status switch
+    {
+        ParticipantStatus.Arrived   => "Ya estoy en el lugar ✅",
+        ParticipantStatus.Delayed   => "Estoy demorado 🟡",
+        ParticipantStatus.Emergency => "¡EMERGENCIA! 🆘",
+        _                           => "En camino..."
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        _clockTimer?.Dispose();
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
+}
