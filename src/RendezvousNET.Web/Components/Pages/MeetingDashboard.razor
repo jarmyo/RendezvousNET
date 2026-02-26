@@ -1,0 +1,163 @@
+@page "/meeting/{MeetingId:guid}"
+@using RendezvousNET.Shared.DTOs.Meetings
+@using RendezvousNET.Shared.DTOs.Participants
+@using RendezvousNET.Shared.Enums
+@using RendezvousNET.Web.Services
+@inject MeetingHubService HubService
+@inject IConfiguration Configuration
+@implements IAsyncDisposable
+
+<PageTitle>Meeting Dashboard — @(meeting?.Title ?? "Loading...")</PageTitle>
+
+@if (meeting is null)
+{
+    <p class="text-center mt-8 text-gray-500">Loading meeting details…</p>
+}
+else
+{
+    <!-- ═══════════════════════════════════════════════════
+         FIXED HEADER — Host info, location, time & timer
+         ═══════════════════════════════════════════════ -->
+    <header class="meeting-header">
+        <div class="header-info">
+            <h1 class="meeting-title">@meeting.Title</h1>
+            <p class="host-name">Hosted by <strong>@meeting.Host.DisplayName</strong></p>
+        </div>
+        <div class="header-meta">
+            <span class="location-badge">📍 @meeting.Location</span>
+            <span class="time-badge">🕐 @meeting.ScheduledAt.ToLocalTime().ToString("ddd, MMM d · h:mm tt")</span>
+        </div>
+        <div class="timer-container">
+            <span class="timer-label">Time until meeting</span>
+            <span class="timer-value @(countdown <= TimeSpan.Zero ? "timer-past" : "")">
+                @FormatCountdown(countdown)
+            </span>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════
+         SCROLLABLE PARTICIPANT LIST
+         ═══════════════════════════════════════════════ -->
+    <section class="participant-list">
+        @if (participants.Count == 0)
+        {
+            <p class="empty-state">No participants have joined yet.</p>
+        }
+        else
+        {
+            @foreach (var p in participants)
+            {
+                <div class="participant-card">
+                    <!-- Status circle — color updates in real-time via SignalR -->
+                    <div class="status-circle @GetStatusClass(p.Status)"
+                         title="@p.Status.ToString()">
+                    </div>
+
+                    <div class="participant-info">
+                        <span class="participant-name">@p.DisplayName</span>
+                        <span class="participant-type">
+                            @(p.ParticipantType == ParticipantType.AnonymousGuest ? "⚠️ Guest" : "")
+                        </span>
+                    </div>
+
+                    <div class="participant-status-label">
+                        @GetStatusLabel(p.Status)
+                    </div>
+                </div>
+            }
+        }
+    </section>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="error-banner">@errorMessage</div>
+}
+
+@code {
+    [Parameter] public Guid MeetingId { get; set; }
+
+    private MeetingDto? meeting;
+    private List<MeetingParticipantDto> participants = [];
+    private string? errorMessage;
+    private TimeSpan countdown;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load meeting data from API
+        await LoadMeetingAsync();
+
+        // Start countdown timer (updates every second)
+        _timer = new System.Threading.Timer(_ =>
+        {
+            if (meeting is not null)
+            {
+                countdown = meeting.ScheduledAt - DateTimeOffset.UtcNow;
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        // Connect to SignalR hub
+        var hubUrl = Configuration["Api:HubUrl"] ?? "https://localhost:7000/hubs/meeting";
+        HubService.OnStatusUpdated += OnParticipantStatusUpdated;
+        await HubService.ConnectAsync(hubUrl, MeetingId);
+    }
+
+    private async Task LoadMeetingAsync()
+    {
+        // TODO: replace with proper HttpClient call to the API
+        // var result = await _apiClient.GetMeetingAsync(MeetingId);
+        // For now, leave as placeholder — meeting stays null until connected to real API
+        await Task.CompletedTask;
+    }
+
+    private Task OnParticipantStatusUpdated(ParticipantStatusUpdatedDto payload)
+    {
+        var existing = participants.FirstOrDefault(p => p.Id == payload.ParticipantId);
+        if (existing is not null)
+        {
+            var updated = existing with
+            {
+                Status = payload.Status,
+                CurrentLatitude = payload.Latitude,
+                CurrentLongitude = payload.Longitude
+            };
+            var idx = participants.IndexOf(existing);
+            participants[idx] = updated;
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetStatusClass(ParticipantStatus status) => status switch
+    {
+        ParticipantStatus.Arrived   => "status-green",
+        ParticipantStatus.Delayed   => "status-yellow",
+        ParticipantStatus.Emergency => "status-red",
+        _                           => "status-gray"
+    };
+
+    private static string GetStatusLabel(ParticipantStatus status) => status switch
+    {
+        ParticipantStatus.Arrived   => "✅ At the venue",
+        ParticipantStatus.Delayed   => "🟡 Running late",
+        ParticipantStatus.Emergency => "🚨 Emergency",
+        _                           => "⬜ Pending"
+    };
+
+    private static string FormatCountdown(TimeSpan ts)
+    {
+        if (ts <= TimeSpan.Zero) return "In progress";
+        return ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours}h {ts.Minutes:D2}m {ts.Seconds:D2}s"
+            : $"{ts.Minutes:D2}m {ts.Seconds:D2}s";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _timer?.Dispose();
+        HubService.OnStatusUpdated -= OnParticipantStatusUpdated;
+        await HubService.DisconnectAsync();
+    }
+}
