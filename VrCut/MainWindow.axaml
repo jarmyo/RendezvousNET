@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:VrCut"
+        xmlns:c="using:VrCut.Controls"
+        xmlns:s="using:VrCut.Services"
+        x:Class="VrCut.MainWindow"
+        Title="VrCut – cortes sin pérdida"
+        Width="1280" Height="800" MinWidth="900" MinHeight="600">
+
+  <Window.Styles>
+    <Style Selector="Button">
+      <Setter Property="Margin" Value="0,0,6,6" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#99FFFFFF" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <!-- Source and folder selection -->
+    <Border DockPanel.Dock="Top" Background="#1E1E24" Padding="8,8,8,2">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+        <ComboBox x:Name="SourceBox" Grid.Column="0" Width="190" Margin="0,0,6,6"
+                  SelectedIndex="0" SelectionChanged="OnSourceChanged">
+          <ComboBoxItem>💻  Esta computadora</ComboBoxItem>
+          <ComboBoxItem>📱  Teléfono Android</ComboBoxItem>
+        </ComboBox>
+        <Button x:Name="PickFolderButton" Grid.Column="1" Content="📂 Elegir carpeta…" Click="OnPickFolder" />
+        <Button Grid.Column="2" Content="⬆" ToolTip.Tip="Carpeta superior" Click="OnFolderUp" />
+        <Button Grid.Column="3" Content="⟳" ToolTip.Tip="Recargar" Click="OnRefresh" />
+        <TextBox x:Name="PathBox" Grid.Column="4" Margin="0,0,0,6" KeyDown="OnPathKeyDown"
+                 Watermark="Ruta de la carpeta (Enter para abrir)" />
+      </Grid>
+    </Border>
+
+    <!-- Status bar -->
+    <Border DockPanel.Dock="Bottom" Background="#1E1E24" Padding="8,4">
+      <Grid ColumnDefinitions="*,220">
+        <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <ProgressBar x:Name="Progress" Grid.Column="1" Minimum="0" Maximum="1" IsVisible="False" />
+      </Grid>
+    </Border>
+
+    <Grid ColumnDefinitions="300,4,*">
+      <!-- File browser -->
+      <ListBox x:Name="FileList" Grid.Column="0" SelectionChanged="OnFileSelected" DoubleTapped="OnFileDoubleTapped">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="local:BrowserEntry">
+            <Grid ColumnDefinitions="Auto,*,Auto" ToolTip.Tip="{Binding Name}">
+              <TextBlock Text="{Binding Icon}" Margin="0,0,8,0" />
+              <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Text="{Binding SizeText}" Classes="hint" Margin="8,0,0,0" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <GridSplitter Grid.Column="1" Background="#2A2A30" ResizeDirection="Columns" />
+
+      <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto,Auto,Auto" Margin="8">
+        <!-- Frame preview at the playhead -->
+        <Border Grid.Row="0" Background="Black" CornerRadius="4" ClipToBounds="True">
+          <Panel>
+            <Image x:Name="PreviewImage" Stretch="Uniform" />
+            <TextBlock x:Name="PlaceholderText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Classes="hint" FontSize="16" Text="Elige una carpeta y selecciona un video" />
+          </Panel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,6">
+          <TextBlock x:Name="TimeText" FontSize="20" FontWeight="SemiBold" Text="00:00.0" />
+          <TextBlock x:Name="InfoText" Grid.Column="1" Classes="hint" VerticalAlignment="Center" />
+        </Grid>
+
+        <c:TimelineControl x:Name="Timeline" Grid.Row="2" Height="120" Margin="0,0,0,8" />
+
+        <!-- Navigation and marking -->
+        <WrapPanel Grid.Row="3">
+          <Button Content="⏮ Keyframe" ToolTip.Tip="Keyframe anterior" Click="OnPrevKeyframe" />
+          <Button Content="-10s" Click="OnBack10" />
+          <Button Content="-1s" ToolTip.Tip="Flecha izquierda" Click="OnBack1" />
+          <Button Content="+1s" ToolTip.Tip="Flecha derecha" Click="OnForward1" />
+          <Button Content="+10s" Click="OnForward10" />
+          <Button Content="Keyframe ⏭" ToolTip.Tip="Keyframe siguiente" Click="OnNextKeyframe" />
+          <Button Content="[ Marcar inicio (I)" Click="OnMarkIn" />
+          <Button Content="Marcar fin (O) ]" Click="OnMarkOut" />
+          <Button Content="✂ Inicio → aquí" ToolTip.Tip="Quita todo lo que hay antes del cabezal (intro)" Click="OnCutToHere" />
+          <Button Content="✂ Aquí → final" ToolTip.Tip="Quita todo lo que hay después del cabezal" Click="OnCutFromHere" />
+          <CheckBox x:Name="SnapBox" IsChecked="True" Margin="6,0,12,6"
+                    ToolTip.Tip="Ajusta el final de cada corte al siguiente keyframe para que no quede ningún pedazo de la escena borrada"
+                    Content="Ajustar a keyframe" />
+          <CheckBox x:Name="LeftEyeBox" Margin="0,0,0,6" IsCheckedChanged="OnLeftEyeChanged"
+                    ToolTip.Tip="Para videos lado a lado (SBS): muestra solo la mitad izquierda"
+                    Content="Vista de un ojo (SBS)" />
+        </WrapPanel>
+
+        <!-- Cut list and export -->
+        <Grid Grid.Row="4" ColumnDefinitions="*,300">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,4"
+                       Text="Partes que se van a borrar (doble clic para ir, Supr para quitar):" />
+            <ListBox x:Name="CutList" Height="130" DoubleTapped="OnCutDoubleTapped">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="s:CutRange">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Text}" VerticalAlignment="Center" FontFamily="Consolas,Menlo,monospace" />
+                    <Button Grid.Column="1" Content="✕" Margin="0" Padding="8,2" Click="OnRemoveCut" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+
+          <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="4">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Text="Sin cortes todavía." />
+            <RadioButton x:Name="CopyRadio" GroupName="out" IsChecked="True">
+              <TextBlock Text="Guardar copia (cut_nombre.mp4)" TextWrapping="Wrap" />
+            </RadioButton>
+            <RadioButton x:Name="ReplaceRadio" GroupName="out">
+              <TextBlock Text="Reemplazar el original (no se puede deshacer)" TextWrapping="Wrap" />
+            </RadioButton>
+            <Button x:Name="ExportButton" Classes="accent" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center" IsEnabled="False" Margin="0,6,0,0"
+                    Content="Exportar sin pérdida" Click="OnExport" />
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </Grid>
+  </DockPanel>
+</Window>
