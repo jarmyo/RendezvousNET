@@ -1,6 +1,6 @@
 # VrView APK
 
-Instalador de VrView para Android, compilado desde el branch `ccr-158be66e-pae07c` (commit 690eb96).
+Instalador de VrView para Android, compilado desde el branch `ccr-158be66e-pae07c` (commit d414a77).
 
 1. Descarga [VrView.apk](VrView.apk) desde el teléfono (botón de descarga en GitHub).
 2. Ábrelo y permite "instalar apps desconocidas" cuando Android lo pida.
