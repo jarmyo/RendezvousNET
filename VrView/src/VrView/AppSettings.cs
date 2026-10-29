@@ -84,6 +84,25 @@ internal sealed class AppSettings
         set => Edit(e => e.PutBoolean("gaze", value));
     }
 
+    /// <summary>0 = small, 1 = medium, 2 = large controls (VR panel and touch overlay).</summary>
+    public int ControlsSize
+    {
+        get => _prefs.GetInt("controlsSize", 1);
+        set => Edit(e => e.PutInt("controlsSize", value));
+    }
+
+    /// <summary>Format chosen by hand for a folder; used for its videos without format tags in the name.</summary>
+    public VideoFormat? GetFolderFormat(string folderKey) =>
+        VideoFormat.TryParse(_videos.GetString("folder:" + folderKey, null));
+
+    public void SetFolderFormat(string folderKey, VideoFormat? format)
+    {
+        var e = _videos.Edit()!;
+        if (format is { } f) e.PutString("folder:" + folderKey, f.Serialize());
+        else e.Remove("folder:" + folderKey);
+        e.Apply();
+    }
+
     public VideoState GetVideo(string location) => VideoState.Parse(_videos.GetString(location, null));
 
     public void SaveVideo(string location, VideoState state) =>

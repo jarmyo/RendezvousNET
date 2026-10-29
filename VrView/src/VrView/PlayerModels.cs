@@ -17,9 +17,10 @@ internal sealed record RenderConfig(
     float Fov,
     float IpdShift,
     int LensLevel,
-    bool GazeClick)
+    bool GazeClick,
+    float MenuScale)
 {
-    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true);
+    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true, ControlSizes.MenuScale(1));
 
     /// <summary>Lens pre-distortion coefficients (k1, k2) for each "Lente" level.</summary>
     public (float K1, float K2) LensCoefficients => LensLevel switch
@@ -40,7 +41,8 @@ internal sealed record MenuModel(
     RepeatMode Repeat,
     int VolumePercent,
     string FormatLabel,
-    bool FormatAuto,
+    // Where the format comes from: "auto", "carpeta" or "" (chosen for this video).
+    string FormatNote,
     float Pitch,
     float Roll,
     float Yaw,
@@ -49,9 +51,23 @@ internal sealed record MenuModel(
     int LensLevel,
     bool GazeClick,
     int Index,
-    int Count)
+    int Count,
+    int ControlsSize)
 {
-    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, "", true, 0, 0, 0, 95, 0, 0, true, 0, 0);
+    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1);
+
+    public string FormatText => FormatNote.Length > 0 ? $"{FormatLabel} ({FormatNote})" : FormatLabel;
+}
+
+/// <summary>The "Controles: chicos / medianos / grandes" setting, shared by the VR panel and the touch overlay.</summary>
+internal static class ControlSizes
+{
+    public const int Count = 3;
+
+    /// <summary>Scale of the in-VR panel (1 = the original size).</summary>
+    public static float MenuScale(int size) => size switch { 0 => 0.6f, 1 => 0.8f, _ => 1f };
+
+    public static string Label(int size) => size switch { 0 => "chicos", 1 => "medianos", _ => "grandes" };
 }
 
 /// <summary>Spanish labels shared by the VR panel and the touch overlay.</summary>
@@ -87,6 +103,9 @@ internal static class Labels
         MenuAction.IpdPlus => "Lentes +",
         MenuAction.Lens => m.LensLevel switch { 1 => "Distorsión: suave", 2 => "Distorsión: fuerte", _ => "Distorsión: no" },
         MenuAction.Dwell => m.GazeClick ? "Clic mirando: sí" : "Clic mirando: no",
+        MenuAction.SetHorizon => "Fijar con la cabeza",
+        MenuAction.MenuSize => "Controles: " + ControlSizes.Label(m.ControlsSize),
+        MenuAction.Hide => "✕",
         _ => "",
     };
 
@@ -94,6 +113,6 @@ internal static class Labels
     {
         MenuPage.Horizon => $"Horizonte · inclinación {m.Pitch:+0.0;-0.0;0}° · nivel {m.Roll:+0.0;-0.0;0}° · giro {m.Yaw:+0;-0;0}°",
         MenuPage.Settings => $"Ajustes · campo de visión {m.Fov:0}° · separación lentes {m.IpdShift * 100:+0;-0;0}",
-        _ => $"{MediaUtil.FormatTime(m.PositionMs)} / {MediaUtil.FormatTime(m.DurationMs)}   ·   {m.FormatLabel}{(m.FormatAuto ? " (auto)" : "")}   ·   Vol {m.VolumePercent}%   ·   {m.Index + 1}/{m.Count}",
+        _ => $"{MediaUtil.FormatTime(m.PositionMs)} / {MediaUtil.FormatTime(m.DurationMs)}   ·   {m.FormatText}   ·   Vol {m.VolumePercent}%   ·   {m.Index + 1}/{m.Count}",
     };
 }

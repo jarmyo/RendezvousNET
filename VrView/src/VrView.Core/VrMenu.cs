@@ -9,6 +9,7 @@ public enum MenuAction
     Shuffle, Repeat, Format, Horizon, Recenter, Settings, Exit,
     PitchUp, PitchDown, RollLeft, RollRight, YawLeft, YawRight, ResetHorizon, Back,
     ZoomOut, ZoomIn, IpdMinus, IpdPlus, Lens, Dwell,
+    SetHorizon, MenuSize, Hide,
 }
 
 public enum MenuPage
@@ -35,6 +36,9 @@ public static class VrMenuLayout
 
     public static readonly MenuButton SeekBar = new(MenuAction.Seek, 0.04f, 0.25f, 0.96f, 0.35f);
 
+    /// <summary>Small "✕" in the top-right corner of every page.</summary>
+    public static readonly MenuButton CloseButton = new(MenuAction.Hide, 0.925f, 0.025f, 0.975f, 0.145f);
+
     private const float Row1Top = 0.41f, Row1Bottom = 0.65f, Row2Top = 0.71f, Row2Bottom = 0.95f;
 
     private static readonly Dictionary<MenuPage, MenuButton[]> Pages = new()
@@ -45,18 +49,20 @@ public static class VrMenuLayout
             .Concat(Row(Row2Top, Row2Bottom,
                 (MenuAction.Shuffle, false), (MenuAction.Repeat, false), (MenuAction.Format, false),
                 (MenuAction.Horizon, false), (MenuAction.Recenter, false), (MenuAction.Settings, false), (MenuAction.Exit, false)))
-            .Append(SeekBar).ToArray(),
+            .Append(SeekBar).Append(CloseButton).ToArray(),
         [MenuPage.Horizon] = Row(Row1Top, Row1Bottom,
                 (MenuAction.PitchUp, true), (MenuAction.PitchDown, true), (MenuAction.RollLeft, true),
                 (MenuAction.RollRight, true), (MenuAction.YawLeft, true), (MenuAction.YawRight, true))
             .Concat(Row(Row2Top, Row2Bottom,
-                (MenuAction.ResetHorizon, false), (MenuAction.Recenter, false), (MenuAction.Back, false)))
-            .ToArray(),
+                (MenuAction.SetHorizon, false), (MenuAction.ResetHorizon, false), (MenuAction.Recenter, false),
+                (MenuAction.Back, false)))
+            .Append(CloseButton).ToArray(),
         [MenuPage.Settings] = Row(Row1Top, Row1Bottom,
                 (MenuAction.ZoomOut, true), (MenuAction.ZoomIn, true), (MenuAction.IpdMinus, true),
                 (MenuAction.IpdPlus, true), (MenuAction.Lens, false), (MenuAction.Dwell, false))
-            .Concat(Row(Row2Top, Row2Bottom, (MenuAction.Format, false), (MenuAction.Back, false)))
-            .ToArray(),
+            .Concat(Row(Row2Top, Row2Bottom,
+                (MenuAction.Format, false), (MenuAction.MenuSize, false), (MenuAction.Back, false)))
+            .Append(CloseButton).ToArray(),
     };
 
     public static IReadOnlyList<MenuButton> Buttons(MenuPage page) => Pages[page];

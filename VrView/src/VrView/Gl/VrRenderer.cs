@@ -23,6 +23,10 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         void OnVideoSurfaceCreated(SurfaceTexture surfaceTexture);
         /// <summary>Called on the GL thread when the user clicks a menu button by gaze or trigger.</summary>
         void OnMenuAction(MenuAction action, float fraction);
+        /// <summary>Called on the GL thread when "set horizon with the head" captured a new correction (degrees).</summary>
+        void OnHorizonCaptured(float pitch, float roll, float yaw);
+        /// <summary>Called on the GL thread when the capture was cancelled or timed out.</summary>
+        void OnHorizonCaptureCancelled();
     }
 
     private const float SphereRadius = 50f;
@@ -33,6 +37,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private const float PanelHeight = PanelWidth / VrMenuLayout.Aspect;
     private const float LookDownOpenAngle = -55f * VrMath.Deg2Rad;
     private const float MenuIdleHideSeconds = 6f;
+    private const float GuideWidth = 6f;
+    private const float GuideHeight = GuideWidth / 8f;
+    private const float HorizonCaptureTimeoutSeconds = 30f;
 
     private readonly HeadTracker _tracker;
     private readonly IHost _host;
@@ -46,16 +53,18 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     /// <summary>Published menu state for the UI thread (gamepad mapping).</summary>
     public volatile bool MenuVisible;
     public volatile MenuPage Page;
+    /// <summary>Published "set horizon with the head" state for the UI thread.</summary>
+    public volatile bool Capturing;
 
     private volatile bool _recenterRequested;
     private volatile bool _frameAvailable;
 
     // GL resources
     private int _videoProgram, _texProgram, _reticleProgram, _distortProgram;
-    private int _oesTexture, _panelTexture, _reticleVbo;
+    private int _oesTexture, _panelTexture, _guideTexture, _reticleVbo;
     private int _fbo, _fboTexture, _fboWidth, _fboHeight;
     private SurfaceTexture? _surfaceTexture;
-    private GlMesh? _videoMesh, _panelMesh, _screenQuad;
+    private GlMesh? _videoMesh, _panelMesh, _guideMesh, _screenQuad;
     private (Projection, float, float) _videoMeshKey;
     private MenuPainter? _painter;
     private int _width = 1, _height = 1;
@@ -81,6 +90,14 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private MenuAction _paintedHover;
     private bool _panelDirty = true;
 
+    // "Set horizon with the head" (GL thread only)
+    private bool _capturing;
+    private float _captureSeconds;
+    private readonly StillnessDetector _stillness = new();
+    /// <summary>Freshly captured horizon, used until the UI thread pushes it back in <see cref="Config"/>.</summary>
+    private (float Pitch, float Roll, float Yaw)? _capturedHorizon;
+    private float _capturedSeconds;
+
     public VrRenderer(HeadTracker tracker, IHost host)
     {
         _tracker = tracker;
@@ -94,6 +111,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
 
     public void ShowMenu(MenuPage page)
     {
+        if (_capturing) CancelHorizonCapture();
         if (!_menuVisible)
         {
             var f = VrMath.Forward(CurrentView());
@@ -105,6 +123,26 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
 
     public void HideMenu() => SetMenu(false, MenuPage.Main);
 
+    /// <summary>
+    /// Starts "set horizon with the head": the menu closes, a level guide line follows the head and,
+    /// once the head is held still, the current view becomes the new level, straight-ahead view.
+    /// </summary>
+    public void StartHorizonCapture()
+    {
+        HideMenu();
+        _capturing = true;
+        Capturing = true;
+        _captureSeconds = 0;
+        _stillness.Reset();
+    }
+
+    private void CancelHorizonCapture()
+    {
+        _capturing = false;
+        Capturing = false;
+        _host.OnHorizonCaptureCancelled();
+    }
+
     public void ToggleMenu()
     {
         if (_menuVisible) HideMenu();
@@ -114,9 +152,10 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     /// <summary>Viewer button / screen tap: open the menu, or click what the reticle points at.</summary>
     public void Trigger()
     {
+        if (_capturing) { CancelHorizonCapture(); return; }
         if (!_menuVisible) { ShowMenu(MenuPage.Main); return; }
         var f = VrMath.Forward(CurrentView());
-        var hit = VrMath.PanelHit(f, _menuYaw, _menuPitch, PanelDistance, PanelWidth, PanelHeight);
+        var hit = HitPanel(f, Config);
         var (action, fraction, _) = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : (MenuAction.None, 0f, false);
         if (action == MenuAction.None) HideMenu();
         else Fire(action, fraction);
@@ -141,7 +180,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             case MenuAction.Horizon: SetMenu(true, MenuPage.Horizon); break;
             case MenuAction.Settings: SetMenu(true, MenuPage.Settings); break;
             case MenuAction.Back: SetMenu(true, MenuPage.Main); break;
-            case MenuAction.Exit: SetMenu(false, MenuPage.Main); break;
+            case MenuAction.Exit:
+            case MenuAction.Hide: SetMenu(false, MenuPage.Main); break;
+            case MenuAction.SetHorizon: StartHorizonCapture(); break;
         }
         _idleSeconds = 0;
         _host.OnMenuAction(action, fraction);
@@ -156,10 +197,11 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         _reticleProgram = GlUtil.CreateProgram(Shaders.ReticleVertex, Shaders.ReticleFragment);
         _distortProgram = GlUtil.CreateProgram(Shaders.TexturedVertex, Shaders.DistortionFragment);
 
-        var tex = new int[2];
-        GLES20.GlGenTextures(2, tex, 0);
+        var tex = new int[3];
+        GLES20.GlGenTextures(3, tex, 0);
         _oesTexture = tex[0];
         _panelTexture = tex[1];
+        _guideTexture = tex[2];
         GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, _oesTexture);
         SetLinearClamp(GLES11Ext.GlTextureExternalOes);
         GLES20.GlBindTexture(GLES20.GlTexture2d, _panelTexture);
@@ -169,6 +211,17 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         var quad = MeshBuilder.Quad(PanelWidth, PanelHeight, 0);
         for (int i = 4; i < quad.Vertices.Length; i += Mesh.FloatsPerVertex) quad.Vertices[i] = 1f - quad.Vertices[i];
         _panelMesh = new GlMesh(quad);
+
+        var guide = MeshBuilder.Quad(GuideWidth, GuideHeight, PanelDistance);
+        for (int i = 4; i < guide.Vertices.Length; i += Mesh.FloatsPerVertex) guide.Vertices[i] = 1f - guide.Vertices[i];
+        _guideMesh = new GlMesh(guide);
+        GLES20.GlBindTexture(GLES20.GlTexture2d, _guideTexture);
+        SetLinearClamp(GLES20.GlTexture2d);
+        using (var guideBitmap = MenuPainter.PaintHorizonGuide())
+        {
+            GLUtils.TexImage2D(GLES20.GlTexture2d, 0, guideBitmap, 0);
+            guideBitmap.Recycle();
+        }
         _screenQuad = new GlMesh(MeshBuilder.Quad(2, 2, 0));
 
         var ids = new int[1];
@@ -232,6 +285,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             _autoRecenterDone = true;
         }
 
+        UpdateHorizonCapture(view, cfg, dt);
         UpdateMenu(view, cfg, dt);
 
         GLES20.GlBindFramebuffer(GLES20.GlFramebuffer, 0);
@@ -246,8 +300,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         int eyes = stereo ? 2 : 1;
         int eyeWidth = stereo ? _width / 2 : _width;
         bool distort = stereo && cfg.LensLevel > 0;
-        var model = VrMath.VideoModel(cfg.Pitch, cfg.Roll, cfg.Yaw, _recenterYaw);
-        var panelModel = VrMath.PanelModel(_menuYaw, _menuPitch, PanelDistance);
+        var (hPitch, hRoll, hYaw) = _capturedHorizon ?? (cfg.Pitch, cfg.Roll, cfg.Yaw);
+        var model = VrMath.VideoModel(hPitch, hRoll, hYaw, _recenterYaw);
+        var panelModel = Matrix4x4.CreateScale(cfg.MenuScale) * VrMath.PanelModel(_menuYaw, _menuPitch, PanelDistance);
 
         for (int eye = 0; eye < eyes; eye++)
         {
@@ -270,7 +325,12 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             if (_menuVisible)
             {
                 DrawPanel(panelModel * view * proj);
-                DrawReticle(proj);
+                DrawReticle(proj, cfg.GazeClick ? _dwell.Progress : 0f, _hovered != MenuAction.None);
+            }
+            else if (_capturing)
+            {
+                DrawGuide(proj);
+                DrawReticle(proj, _stillness.Progress, _stillness.Progress > 0);
             }
 
             if (distort)
@@ -287,9 +347,40 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private Matrix4x4 CurrentView() =>
         Matrix4x4.CreateRotationY(TouchYaw) * _headView * Matrix4x4.CreateRotationX(TouchPitch);
 
+    private Vector2? HitPanel(Vector3 forward, RenderConfig cfg) =>
+        VrMath.PanelHit(forward, _menuYaw, _menuPitch, PanelDistance, PanelWidth * cfg.MenuScale, PanelHeight * cfg.MenuScale);
+
+    private void UpdateHorizonCapture(Matrix4x4 view, RenderConfig cfg, float dt)
+    {
+        if (_capturedHorizon is { } c)
+        {
+            // Keep the captured values until the UI thread has pushed them back (or give up after 2 s).
+            _capturedSeconds += dt;
+            bool applied = MathF.Abs(cfg.Pitch - c.Pitch) < 0.05f && MathF.Abs(cfg.Roll - c.Roll) < 0.05f && MathF.Abs(cfg.Yaw - c.Yaw) < 0.05f;
+            if (applied || _capturedSeconds > 2f) _capturedHorizon = null;
+        }
+        if (!_capturing) return;
+
+        _captureSeconds += dt;
+        if (_captureSeconds > HorizonCaptureTimeoutSeconds) { CancelHorizonCapture(); return; }
+        if (!_stillness.Update(VrMath.Forward(view), VrMath.Up(view), dt)) return;
+
+        var (p, r, y) = VrMath.HorizonFromView(cfg.Pitch, cfg.Roll, cfg.Yaw, _recenterYaw, view);
+        p = Math.Clamp(p, -90f, 90f);
+        r = VideoState.NormalizeAngle(r);
+        y = VideoState.NormalizeAngle(y);
+        _recenterYaw = VrMath.YawOf(VrMath.Forward(view));
+        _capturedHorizon = (p, r, y);
+        _capturedSeconds = 0;
+        _capturing = false;
+        Capturing = false;
+        _host.OnHorizonCaptured(p, r, y);
+    }
+
     private void UpdateMenu(Matrix4x4 view, RenderConfig cfg, float dt)
     {
         var forward = VrMath.Forward(view);
+        if (_capturing) return;
         if (!_menuVisible)
         {
             // Head gesture: looking straight down for a moment opens the menu.
@@ -307,7 +398,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             return;
         }
 
-        var hit = VrMath.PanelHit(forward, _menuYaw, _menuPitch, PanelDistance, PanelWidth, PanelHeight);
+        var hit = HitPanel(forward, cfg);
         var (action, fraction, repeat) = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : (MenuAction.None, 0f, false);
         if (action != _hovered) { _hovered = action; _panelDirty = true; }
 
@@ -385,7 +476,23 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         GLES20.GlDisable(GLES20.GlBlend);
     }
 
-    private void DrawReticle(Matrix4x4 proj)
+    private void DrawGuide(Matrix4x4 proj)
+    {
+        GLES20.GlEnable(GLES20.GlBlend);
+        GLES20.GlBlendFunc(GLES20.GlSrcAlpha, GLES20.GlOneMinusSrcAlpha);
+        GLES20.GlUseProgram(_texProgram);
+        // Head-locked: no model or view transform.
+        VrMath.ToGl(proj, _mvp);
+        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_texProgram, "uMvp"), 1, false, _mvp, 0);
+        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_texProgram, "uAlpha"), 1f);
+        GLES20.GlActiveTexture(GLES20.GlTexture0);
+        GLES20.GlBindTexture(GLES20.GlTexture2d, _guideTexture);
+        GLES20.GlUniform1i(GLES20.GlGetUniformLocation(_texProgram, "uTexture"), 0);
+        _guideMesh!.Draw(GLES20.GlGetAttribLocation(_texProgram, "aPosition"), GLES20.GlGetAttribLocation(_texProgram, "aUv"));
+        GLES20.GlDisable(GLES20.GlBlend);
+    }
+
+    private void DrawReticle(Matrix4x4 proj, float progress, bool highlight)
     {
         GLES20.GlEnable(GLES20.GlBlend);
         GLES20.GlBlendFunc(GLES20.GlSrcAlpha, GLES20.GlOneMinusSrcAlpha);
@@ -393,8 +500,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         VrMath.ToGl(proj, _mvp);
         GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_reticleProgram, "uMvp"), 1, false, _mvp, 0);
         GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_reticleProgram, "uSize"), Math.Max(24f, _height * 0.04f));
-        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_reticleProgram, "uProgress"), Config.GazeClick ? _dwell.Progress : 0f);
-        bool hovering = _hovered != MenuAction.None;
+        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_reticleProgram, "uProgress"), progress);
+        bool hovering = highlight;
         GLES20.GlUniform4f(GLES20.GlGetUniformLocation(_reticleProgram, "uColor"),
             hovering ? 0.31f : 1f, hovering ? 0.76f : 1f, hovering ? 0.97f : 1f, 1f);
         int pos = GLES20.GlGetAttribLocation(_reticleProgram, "aPosition");

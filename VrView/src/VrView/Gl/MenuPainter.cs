@@ -28,7 +28,7 @@ internal sealed class MenuPainter : IDisposable
         _text.TextSize = Height * 0.075f;
         _text.FakeBoldText = true;
         _text.Color = Color.White;
-        c.DrawText(Ellipsize(m.Title, Width * 0.94f), Width * 0.03f, Height * 0.10f, _text);
+        c.DrawText(Ellipsize(m.Title, Width * 0.86f), Width * 0.03f, Height * 0.10f, _text);
         _text.FakeBoldText = false;
         _text.TextSize = Height * 0.058f;
         _text.Color = Color.Argb(255, 176, 190, 197);
@@ -59,6 +59,26 @@ internal sealed class MenuPainter : IDisposable
             string label = Labels.For(b.Action, m);
             DrawFitted(c, label, r);
         }
+    }
+
+    /// <summary>
+    /// Head-locked guide for "set horizon with the head": a long level line to align with the
+    /// video's horizon, and short instructions.
+    /// </summary>
+    public static Bitmap PaintHorizonGuide()
+    {
+        const int w = 2048, h = 256;
+        var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888!)!;
+        var c = new Canvas(bmp);
+        using var line = new Paint { AntiAlias = true, Color = Color.Argb(220, 79, 195, 247), StrokeWidth = 5 };
+        // Leave a gap in the middle for the progress ring.
+        c.DrawLine(0, h / 2f, w / 2f - 60, h / 2f, line);
+        c.DrawLine(w / 2f + 60, h / 2f, w, h / 2f, line);
+        using var text = new Paint { AntiAlias = true, Color = Color.White, TextAlign = Paint.Align.Center, TextSize = 26 };
+        text.SetShadowLayer(6, 0, 0, Color.Black);
+        c.DrawText("Inclina la cabeza hasta que esta línea quede sobre el horizonte del video", w / 2f, h / 2f - 40, text);
+        c.DrawText("y quédate quieto · toca la pantalla para cancelar", w / 2f, h / 2f + 66, text);
+        return bmp;
     }
 
     private void DrawSeekBar(Canvas c, MenuModel m, bool hovered)

@@ -20,8 +20,10 @@ Android y OpenGL ES 2.0. No usa Unity, MAUI ni librerías externas: solo el SDK 
 | Recordar | Recuerda la última carpeta, el último vídeo («Continuar») y la posición de cada vídeo. También guarda por vídeo el formato elegido a mano y la corrección del horizonte. |
 | Formatos | Plano 2D, 180°, 360° y ojo de pez (190° por defecto, o el valor de la etiqueta). Mono, lado a lado (SBS/LR), arriba-abajo (TB/OU), y ojos invertidos (RL/BT). |
 | Detección automática | Por etiquetas en el nombre del archivo y, si faltan, por las proporciones del vídeo. Se puede cambiar a mano (botón **Formato**: auto → cada formato → auto). |
+| Formato por carpeta | El formato que eliges a mano se guarda para ese vídeo **y para su carpeta**: los demás vídeos de la carpeta sin etiquetas en el nombre lo usan automáticamente (se indica «(carpeta)»). Las etiquetas del nombre siempre mandan. Volver a «auto» lo olvida. |
+| Tamaño de los controles | **Controles: chicos / medianos / grandes** (en Ajustes o en los controles táctiles) cambia el tamaño del menú VR y de los botones táctiles. El menú VR tiene un **✕** para cerrarlo y los controles táctiles un botón **✕ Ocultar**. |
 | Visor VR | Pantalla partida para los dos ojos, con seguimiento de la cabeza por el sensor de rotación (giroscopio). Zoom (campo de visión), separación de lentes (IPD) y corrección de la distorsión de las lentes (no / suave / fuerte). |
-| Horizonte | **Recentrar** (pone el centro del vídeo donde miras) y corrección manual de inclinación, nivel (alabeo) y giro para vídeos grabados torcidos. Se guarda para cada vídeo. |
+| Horizonte | **Fijar con la cabeza** (inclinas la cabeza hasta ver el horizonte derecho, te quedas quieto y se fija), **Recentrar** (pone el centro del vídeo donde miras) y corrección manual de inclinación, nivel (alabeo) y giro. Se guarda para cada vídeo. |
 | Sin visor | Vista «pantalla» (una sola imagen): arrastra con el dedo para mirar alrededor y pellizca para hacer zoom. |
 | Abrir con… | Aparece en «Abrir con» de galerías y gestores de archivos para reproducir un vídeo suelto. |
 
@@ -59,7 +61,7 @@ el resto como plano.
 - El menú se oculta solo si dejas de mirarlo unos segundos.
 
 Menú principal: anterior, −10 s, reproducir/pausa, +10 s, siguiente, volumen −/+, aleatorio,
-repetir, formato, horizonte, recentrar, ajustes, salir.
+repetir, formato, horizonte, recentrar, ajustes, salir, y **✕** (arriba a la derecha) para cerrarlo.
 
 ### Mando Bluetooth, teclado, mandos de visor y botones multimedia
 
@@ -88,14 +90,20 @@ multimedia.
 
 - El botón **☰** de la esquina superior derecha muestra u oculta los controles táctiles.
   En vista «pantalla» basta con tocar el vídeo.
-- Controles: lista, vista (visor VR / pantalla), formato, horizonte, recentrar, ajustes, barra
-  de progreso, anterior, ±10 s, reproducir/pausa, siguiente, aleatorio, repetir y volumen.
+- Controles: lista, vista (visor VR / pantalla), formato, horizonte, recentrar, ajustes,
+  tamaño de controles, ocultar, barra de progreso, anterior, ±10 s, reproducir/pausa, siguiente,
+  aleatorio, repetir y volumen.
 - En vista «pantalla»: arrastra para mirar alrededor y pellizca para hacer zoom.
 
 ### Ajustar el horizonte
 
 Abre **Horizonte** (en el menú VR, en los controles táctiles o con `H`):
 
+- **Fijar con la cabeza** (lo más rápido): el menú se cierra y aparece una línea azul fija a tu
+  vista. Inclina la cabeza (y mira arriba o abajo si hace falta) hasta que la línea quede sobre el
+  horizonte del vídeo, y quédate quieto: tras un momento se llena el círculo central y esa
+  posición queda como «derecho y al frente». Ya puedes enderezar la cabeza. Tocar la pantalla,
+  A/OK o Atrás lo cancelan; si no te quedas quieto en 30 s, se cancela solo.
 - **Inclinar ↑/↓** corrige vídeos grabados mirando un poco hacia arriba o hacia abajo.
 - **Nivelar ↺/↻** endereza un horizonte torcido.
 - **Girar ←/→** cambia qué parte del vídeo queda delante.

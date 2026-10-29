@@ -76,6 +76,34 @@ public static class VrMath
         * Matrix4x4.CreateRotationY(yawDeg * Deg2Rad + recenterYawRad);
 
     /// <summary>
+    /// Inverse of <see cref="VideoModel"/> (with no recenter): splits a rotation built as
+    /// RotZ(roll) * RotX(pitch) * RotY(yaw) back into its angles, in degrees.
+    /// </summary>
+    public static (float PitchDeg, float RollDeg, float YawDeg) DecomposeHorizon(in Matrix4x4 m)
+    {
+        float pitch = MathF.Asin(Math.Clamp(-m.M32, -1f, 1f));
+        float roll = MathF.Atan2(m.M12, m.M22);
+        float yaw = MathF.Atan2(m.M31, m.M33);
+        return (pitch * Rad2Deg, roll * Rad2Deg, yaw * Rad2Deg);
+    }
+
+    /// <summary>
+    /// "Set horizon with the head": returns the horizon correction that turns what the user sees
+    /// right now (current correction + recenter + head pose <paramref name="view"/>) into the level,
+    /// straight-ahead view. The caller must then recenter on the head's current yaw
+    /// (<c>YawOf(Forward(view))</c>), so the stored yaw stays relative to the video, not to the room.
+    /// </summary>
+    public static (float PitchDeg, float RollDeg, float YawDeg) HorizonFromView(
+        float pitchDeg, float rollDeg, float yawDeg, float recenterYawRad, in Matrix4x4 view)
+    {
+        // Seen now: VideoModel(current) * view. After recentering on the head yaw ψ and straightening
+        // the head (view = RotY(-ψ)), the view becomes C1 * RotY(ψ) * RotY(-ψ) = C1, so C1 must be
+        // exactly what is seen now.
+        var seen = VideoModel(pitchDeg, rollDeg, yawDeg, recenterYawRad) * view;
+        return DecomposeHorizon(seen);
+    }
+
+    /// <summary>
     /// Perspective projection with an optional horizontal lens-center shift (in NDC units),
     /// used to adapt the image to the viewer's lens spacing (IPD).
     /// </summary>

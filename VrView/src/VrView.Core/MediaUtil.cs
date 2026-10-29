@@ -29,6 +29,24 @@ public static class MediaUtil
     }
 
     /// <summary>
+    /// Identifies the folder a video lives in, from its location (a SAF document URI such as
+    /// <c>content://…/tree/primary%3AMovies/document/primary%3AMovies%2FVR%2Fclip.mp4</c>, or a plain path/URI).
+    /// Providers with opaque document ids fall back to the picked tree, so all its videos share one key.
+    /// </summary>
+    public static string FolderKey(string location)
+    {
+        const string documentMarker = "/document/";
+        int doc = location.IndexOf(documentMarker, StringComparison.Ordinal);
+        if (doc >= 0)
+        {
+            int slash = location.LastIndexOf("%2F", StringComparison.OrdinalIgnoreCase);
+            return slash > doc ? location[..slash] : location[..doc];
+        }
+        int last = location.LastIndexOf('/');
+        return last > 0 ? location[..last] : location;
+    }
+
+    /// <summary>
     /// Decides where to resume a video: returns the saved position unless it is near the
     /// start or the end (then starts from zero).
     /// </summary>

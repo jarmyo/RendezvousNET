@@ -56,13 +56,16 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private int _videoWidth, _videoHeight, _consecutiveErrors, _ticks;
     private VideoState _state = new();
     private VideoFormat _detected = VideoFormat.Default;
+    /// <summary>Format chosen for the video's folder; only used when the file name has no format tags.</summary>
+    private VideoFormat? _folderFormat;
 
     // Touch overlay
     private LinearLayout _overlay = null!, _subRow = null!;
     private HorizontalScrollView _subRowScroll = null!;
     private TextView _titleText = null!, _timeText = null!, _durationText = null!;
     private SeekBar _seekBar = null!;
-    private Button _playButton = null!, _shuffleButton = null!, _repeatButton = null!, _formatButton = null!, _viewButton = null!;
+    private Button _playButton = null!, _shuffleButton = null!, _repeatButton = null!, _formatButton = null!, _viewButton = null!,
+        _sizeButton = null!;
     private MenuPage? _subPage;
     private bool _seekDragging;
     private long _overlayShownAt;
@@ -240,11 +243,27 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     public void OnMenuAction(MenuAction action, float fraction) =>
         RunOnUiThread(() => HandleAction(action, fraction, Source.Vr));
 
+    public void OnHorizonCaptured(float pitch, float roll, float yaw) => RunOnUiThread(() =>
+    {
+        _state.Pitch = pitch;
+        _state.Roll = roll;
+        _state.Yaw = yaw;
+        SaveVideoState();
+        PushConfig();
+        RefreshUi();
+        Toast.MakeText(this, "Horizonte fijado", ToastLength.Short)!.Show();
+    });
+
+    public void OnHorizonCaptureCancelled() => RunOnUiThread(() =>
+        Toast.MakeText(this, "Ajuste de horizonte cancelado", ToastLength.Short)!.Show());
+
     // ---- Playback ----
 
     private MediaItem? Current => _playlist.Current;
 
-    private VideoFormat CurrentFormat => _state.FormatOverride ?? _detected;
+    private VideoFormat CurrentFormat => _state.FormatOverride ?? _folderFormat ?? _detected;
+
+    private string FormatNote => _state.FormatOverride is not null ? "" : _folderFormat is not null ? "carpeta" : "auto";
 
     private void OpenCurrent()
     {
@@ -258,6 +277,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _state = _settings.GetVideo(item.Location);
         _videoWidth = _videoHeight = 0;
         _detected = FormatDetector.Detect(item.Name);
+        _folderFormat = FormatDetector.HasTags(item.Name) ? null : _settings.GetFolderFormat(MediaUtil.FolderKey(item.Location));
         _prepared = false;
         PushConfig();
 
@@ -450,6 +470,19 @@ public class PlayerActivity : Activity, VrRenderer.IHost
                 else if (source == Source.Key) _glView.QueueEvent(() => _renderer.ShowMenu(MenuPage.Main));
                 break;
             case MenuAction.Exit: Finish(); return;
+            case MenuAction.Hide:
+                if (source == Source.Touch) ShowOverlay(false);
+                break;
+            case MenuAction.SetHorizon:
+                ShowOverlay(false);
+                _glView.QueueEvent(() => _renderer.StartHorizonCapture());
+                if (!_settings.StereoView)
+                    Toast.MakeText(this, "Inclina el teléfono hasta alinear la línea con el horizonte y quédate quieto", ToastLength.Long)!.Show();
+                break;
+            case MenuAction.MenuSize:
+                _settings.ControlsSize = (_settings.ControlsSize + 1) % ControlSizes.Count;
+                ApplyOverlaySize();
+                break;
             case MenuAction.PitchUp: AdjustHorizon(HorizonStep, 0, 0); break;
             case MenuAction.PitchDown: AdjustHorizon(-HorizonStep, 0, 0); break;
             case MenuAction.RollLeft: AdjustHorizon(0, HorizonStep, 0); break;
@@ -485,7 +518,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         var choices = VideoFormat.ManualChoices;
         if (_state.FormatOverride is not { } current)
         {
-            int idx = IndexOfFormat(choices, _detected);
+            int idx = IndexOfFormat(choices, CurrentFormat);
             _state.FormatOverride = choices[(idx + 1) % choices.Count];
         }
         else
@@ -494,7 +527,16 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             _state.FormatOverride = idx == choices.Count - 1 ? null : choices[idx + 1];
         }
         SaveVideoState();
-        Toast.MakeText(this, "Formato: " + CurrentFormat.Label + (_state.FormatOverride is null ? " (auto)" : ""), ToastLength.Short)!.Show();
+
+        // Also remember it for the other videos of this folder whose names carry no format tags;
+        // going back to "auto" forgets it.
+        if (Current is { } item)
+        {
+            _folderFormat = _state.FormatOverride;
+            _settings.SetFolderFormat(MediaUtil.FolderKey(item.Location), _state.FormatOverride);
+        }
+        string note = _state.FormatOverride is null ? " (auto)" : " · se usará en esta carpeta";
+        Toast.MakeText(this, "Formato: " + CurrentFormat.Label + note, ToastLength.Short)!.Show();
     }
 
     private static int IndexOfFormat(IReadOnlyList<VideoFormat> list, VideoFormat f)
@@ -518,7 +560,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     {
         _renderer.Config = new RenderConfig(CurrentFormat, _videoWidth, _videoHeight,
             _state.Pitch, _state.Roll, _state.Yaw, _settings.StereoView,
-            _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick);
+            _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
+            ControlSizes.MenuScale(_settings.ControlsSize));
     }
 
     private MenuModel BuildMenuModel()
@@ -531,9 +574,10 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         }
         // Round the position to whole seconds so the panel is only repainted when the text changes.
         return new MenuModel(Current?.Name ?? "", Position / 1000 * 1000, Duration, IsPlaying, _playlist.Shuffle,
-            _playlist.Repeat, vol, CurrentFormat.Label, _state.FormatOverride is null, _state.Pitch, _state.Roll,
+            _playlist.Repeat, vol, CurrentFormat.Label, FormatNote, _state.Pitch, _state.Roll,
             _state.Yaw, _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
-            Math.Max(0, _playlist.Order.ToList().IndexOf(_playlist.CurrentIndex)), _playlist.Count);
+            Math.Max(0, _playlist.Order.ToList().IndexOf(_playlist.CurrentIndex)), _playlist.Count,
+            _settings.ControlsSize);
     }
 
     // ---- Periodic update ----
@@ -576,8 +620,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _playButton.Text = Labels.For(MenuAction.PlayPause, model);
         _shuffleButton.Text = Labels.For(MenuAction.Shuffle, model);
         _repeatButton.Text = Labels.For(MenuAction.Repeat, model);
-        _formatButton.Text = "Formato: " + model.FormatLabel + (model.FormatAuto ? " (auto)" : "");
+        _formatButton.Text = "Formato: " + model.FormatText;
         _viewButton.Text = _settings.StereoView ? "Vista: visor VR" : "Vista: pantalla";
+        _sizeButton.Text = Labels.For(MenuAction.MenuSize, model);
         if (_subPage is { } page) FillSubRow(page, model);
     }
 
@@ -605,6 +650,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         top.AddView(OverlayButton("Horizonte", (_, _) => HandleAction(MenuAction.Horizon, 0, Source.Touch)));
         top.AddView(OverlayButton("Recentrar", (_, _) => HandleAction(MenuAction.Recenter, 0, Source.Touch)));
         top.AddView(OverlayButton("Ajustes", (_, _) => HandleAction(MenuAction.Settings, 0, Source.Touch)));
+        _sizeButton = OverlayButton("", (_, _) => HandleAction(MenuAction.MenuSize, 0, Source.Touch));
+        top.AddView(_sizeButton);
+        top.AddView(OverlayButton("✕ Ocultar", (_, _) => HandleAction(MenuAction.Hide, 0, Source.Touch)));
 
         _titleText = new TextView(this) { Ellipsize = Android.Text.TextUtils.TruncateAt.Middle };
         _titleText.SetSingleLine(true);
@@ -664,8 +712,45 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         corner.Click += (_, _) => ShowOverlay(_overlay.Visibility != ViewStates.Visible);
         root.AddView(corner, new FrameLayout.LayoutParams(Dp(48), Dp(48), GravityFlags.Top | GravityFlags.End));
 
+        ApplyOverlaySize();
         RefreshUi();
         return root;
+    }
+
+    /// <summary>Applies the "Controles: chicos / medianos / grandes" setting to the touch overlay.</summary>
+    private void ApplyOverlaySize()
+    {
+        if (_overlay is null) return;
+        int size = _settings.ControlsSize;
+        float textSp = size switch { 0 => 11f, 1 => 13f, _ => 15f };
+        _titleText.SetTextSize(Android.Util.ComplexUnitType.Sp, textSp);
+        _timeText.SetTextSize(Android.Util.ComplexUnitType.Sp, textSp);
+        _durationText.SetTextSize(Android.Util.ComplexUnitType.Sp, textSp);
+        StyleButtons(_overlay);
+
+        void StyleButtons(ViewGroup group)
+        {
+            for (int i = 0; i < group.ChildCount; i++)
+            {
+                var child = group.GetChildAt(i);
+                if (child is Button b) StyleOverlayButton(b);
+                else if (child is ViewGroup g) StyleButtons(g);
+            }
+        }
+    }
+
+    private void StyleOverlayButton(Button b)
+    {
+        int size = _settings.ControlsSize;
+        float textSp = size switch { 0 => 11f, 1 => 13f, _ => 15f };
+        int minHeight = Dp(size switch { 0 => 30, 1 => 38, _ => 48 });
+        int padH = Dp(size switch { 0 => 6, 1 => 10, _ => 14 });
+        b.SetTextSize(Android.Util.ComplexUnitType.Sp, textSp);
+        b.SetMinHeight(minHeight);
+        b.SetMinimumHeight(minHeight);
+        b.SetMinWidth(Dp(size switch { 0 => 36, 1 => 48, _ => 56 }));
+        b.SetMinimumWidth(0);
+        b.SetPadding(padH, 0, padH, 0);
     }
 
     private LinearLayout ButtonRow(ViewGroup parent)
@@ -681,7 +766,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     {
         var b = new Button(this) { Text = text };
         b.SetAllCaps(false);
-        b.SetMinWidth(Dp(56));
+        StyleOverlayButton(b);
         b.Click += onClick;
         return b;
     }
@@ -761,6 +846,11 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void OnTap()
     {
+        if (_renderer.Capturing)
+        {
+            _glView.QueueEvent(() => _renderer.Trigger()); // cancels the horizon capture
+            return;
+        }
         if (_settings.StereoView)
         {
             // In the headset a tap is the viewer's button: open the gaze menu or click the reticle target.
@@ -813,7 +903,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void HandleBack()
     {
-        if (_renderer.MenuVisible)
+        if (_renderer.Capturing)
+            _glView.QueueEvent(() => _renderer.Trigger());
+        else if (_renderer.MenuVisible)
         {
             var page = _renderer.Page;
             _glView.QueueEvent(() =>
@@ -847,7 +939,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             case Keycode.DpadCenter:
             case Keycode.Enter:
             case Keycode.NumpadEnter:
-                if (menu) _glView.QueueEvent(() => _renderer.Trigger());
+                if (menu || _renderer.Capturing) _glView.QueueEvent(() => _renderer.Trigger());
                 else HandleAction(MenuAction.PlayPause, 0, Source.Key);
                 return true;
             case Keycode.Space:
@@ -863,7 +955,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
                 return true;
             case Keycode.ButtonB:
             case Keycode.Escape:
-                if (menu) HandleBack();
+                if (menu || _renderer.Capturing) HandleBack();
                 return true;
             case Keycode.ButtonX:
             case Keycode.ButtonStart:
