@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-independent logic (playlist, format detection, VR math, menu layout).
+       Kept free of Android APIs so it can be unit-tested on any desktop. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsTrimmable>true</IsTrimmable>
+    <RootNamespace>VrView.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
