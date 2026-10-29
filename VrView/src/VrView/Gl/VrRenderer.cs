@@ -64,11 +64,12 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
 
     // GL resources
     private int _videoProgram, _texProgram, _reticleProgram, _distortProgram;
-    private int _oesTexture, _panelTexture, _guideTexture, _reticleVbo;
+    private int _oesTexture, _panelTexture, _guideTexture, _nadirTexture, _reticleVbo;
     private int _fbo, _fboTexture, _fboWidth, _fboHeight;
     private SurfaceTexture? _surfaceTexture;
-    private GlMesh? _videoMesh, _panelMesh, _guideMesh, _screenQuad;
-    private (Projection, float, float) _videoMeshKey;
+    private GlMesh? _videoMesh, _panelMesh, _guideMesh, _nadirMesh, _screenQuad;
+    private (VideoFormat, float) _videoMeshKey;
+    private float _nadirMeshDeg;
     private MenuPainter? _painter;
     private int _width = 1, _height = 1;
 
@@ -183,6 +184,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         {
             case MenuAction.Horizon: SetMenu(true, MenuPage.Horizon); break;
             case MenuAction.Spots: SetMenu(true, MenuPage.Spots); break;
+            case MenuAction.Tune: SetMenu(true, MenuPage.Tune); break;
             case MenuAction.Settings: SetMenu(true, MenuPage.Settings); break;
             case MenuAction.Back: SetMenu(true, MenuPage.Main); break;
             case MenuAction.Exit:
@@ -202,11 +204,12 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         _reticleProgram = GlUtil.CreateProgram(Shaders.ReticleVertex, Shaders.ReticleFragment);
         _distortProgram = GlUtil.CreateProgram(Shaders.TexturedVertex, Shaders.DistortionFragment);
 
-        var tex = new int[3];
-        GLES20.GlGenTextures(3, tex, 0);
+        var tex = new int[4];
+        GLES20.GlGenTextures(4, tex, 0);
         _oesTexture = tex[0];
         _panelTexture = tex[1];
         _guideTexture = tex[2];
+        _nadirTexture = tex[3];
         GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, _oesTexture);
         SetLinearClamp(GLES11Ext.GlTextureExternalOes);
         GLES20.GlBindTexture(GLES20.GlTexture2d, _panelTexture);
@@ -227,6 +230,14 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             GLUtils.TexImage2D(GLES20.GlTexture2d, 0, guideBitmap, 0);
             guideBitmap.Recycle();
         }
+        GLES20.GlBindTexture(GLES20.GlTexture2d, _nadirTexture);
+        SetLinearClamp(GLES20.GlTexture2d);
+        using (var nadirBitmap = MenuPainter.PaintNadirPatch())
+        {
+            GLUtils.TexImage2D(GLES20.GlTexture2d, 0, nadirBitmap, 0);
+            nadirBitmap.Recycle();
+        }
+        _nadirMesh = null;
         _screenQuad = new GlMesh(MeshBuilder.Quad(2, 2, 0));
 
         var ids = new int[1];
@@ -327,6 +338,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             var proj = VrMath.Projection(cfg.Fov, (float)eyeWidth / _height, 0.05f, 200f, shift);
 
             DrawVideo(model * view * proj, cfg.Format.EyeRect(stereo ? eye : 0));
+            if (cfg.Format.NadirDeg > 0 && cfg.Format.Projection != Projection.Flat)
+                DrawNadir(NadirDown * model * view * proj, cfg.Format.NadirDeg);
             if (_menuVisible)
             {
                 DrawPanel(panelModel * view * proj);
@@ -426,19 +439,45 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             Fire(target);
     }
 
+    /// <summary>Turns a cap around the front (-Z) into one under the viewer (-Y).</summary>
+    private static readonly Matrix4x4 NadirDown = Matrix4x4.CreateRotationX(-MathF.PI / 2);
+
+    private void DrawNadir(Matrix4x4 mvp, float angleDeg)
+    {
+        if (_nadirMesh is null || _nadirMeshDeg != angleDeg)
+        {
+            _nadirMesh?.Dispose();
+            // Slightly inside the video sphere so it is drawn over it.
+            _nadirMesh = new GlMesh(MeshBuilder.Cap(SphereRadius * 0.95f, angleDeg));
+            _nadirMeshDeg = angleDeg;
+        }
+        GLES20.GlEnable(GLES20.GlBlend);
+        GLES20.GlBlendFunc(GLES20.GlSrcAlpha, GLES20.GlOneMinusSrcAlpha);
+        GLES20.GlUseProgram(_texProgram);
+        VrMath.ToGl(mvp, _mvp);
+        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_texProgram, "uMvp"), 1, false, _mvp, 0);
+        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_texProgram, "uAlpha"), 1f);
+        GLES20.GlActiveTexture(GLES20.GlTexture0);
+        GLES20.GlBindTexture(GLES20.GlTexture2d, _nadirTexture);
+        GLES20.GlUniform1i(GLES20.GlGetUniformLocation(_texProgram, "uTexture"), 0);
+        _nadirMesh.Draw(GLES20.GlGetAttribLocation(_texProgram, "aPosition"), GLES20.GlGetAttribLocation(_texProgram, "aUv"));
+        GLES20.GlDisable(GLES20.GlBlend);
+    }
+
     private void EnsureVideoMesh(RenderConfig cfg)
     {
         var f = cfg.Format;
         float aspect = f.Projection == Projection.Flat ? f.EyeAspect(cfg.VideoWidth, cfg.VideoHeight) : 0f;
-        float fov = f.Projection == Projection.Fisheye ? f.FisheyeFov : 0f;
-        var key = (f.Projection, aspect, fov);
+        // Only the geometry-relevant part of the format: eye packing and the nadir patch do not change the mesh.
+        var key = (f with { Stereo = StereoMode.Mono, SwapEyes = false, NadirDeg = 0 }, aspect);
         if (_videoMesh is not null && key == _videoMeshKey) return;
         _videoMesh?.Dispose();
         _videoMesh = new GlMesh(f.Projection switch
         {
-            Projection.Sphere360 => MeshBuilder.Equirect(SphereRadius, 360f),
-            Projection.Dome180 => MeshBuilder.Equirect(SphereRadius, 180f, 64, 48),
-            Projection.Fisheye => MeshBuilder.Fisheye(SphereRadius, fov),
+            Projection.Sphere360 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, latSpanDeg: f.EquirectVFov),
+            Projection.Dome180 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, 64, 48, f.EquirectVFov),
+            Projection.Fisheye => MeshBuilder.Fisheye(SphereRadius, f.FisheyeFov, lens: f.Lens,
+                centerX: f.CenterX, centerY: f.CenterY, radiusScale: f.RadiusScale),
             _ => MeshBuilder.Quad(FlatWidth, FlatWidth / Math.Max(aspect, 0.1f), FlatDistance),
         });
         _videoMeshKey = key;

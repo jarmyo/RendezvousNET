@@ -18,9 +18,10 @@ public static class MeshBuilder
 {
     /// <summary>
     /// Equirectangular sphere section seen from inside. <paramref name="lonSpanDeg"/> is 360 for
-    /// full spheres and 180 for VR180; latitude always spans -90..90.
+    /// full spheres and 180 for VR180; <paramref name="latSpanDeg"/> is normally 180 (pole to pole)
+    /// but some cameras cover less (or more horizontally), which the fine tuning adjusts.
     /// </summary>
-    public static Mesh Equirect(float radius, float lonSpanDeg, int lonSegments = 96, int latSegments = 48)
+    public static Mesh Equirect(float radius, float lonSpanDeg, int lonSegments = 96, int latSegments = 48, float latSpanDeg = 180f)
     {
         int cols = lonSegments + 1, rows = latSegments + 1;
         var v = new float[cols * rows * Mesh.FloatsPerVertex];
@@ -29,7 +30,7 @@ public static class MeshBuilder
         for (int r = 0; r < rows; r++)
         {
             float fv = (float)r / latSegments;
-            float lat = (fv - 0.5f) * MathF.PI;
+            float lat = (fv - 0.5f) * latSpanDeg * VrMath.Deg2Rad;
             for (int c = 0; c < cols; c++)
             {
                 float fu = (float)c / lonSegments;
@@ -45,12 +46,16 @@ public static class MeshBuilder
     }
 
     /// <summary>
-    /// Equidistant fisheye: a polar grid around the front direction, where the angle from the
-    /// center is proportional to the distance from the image center.
+    /// Fisheye: a polar grid around the front direction. The distance from the circle center grows
+    /// with the angle from the lens axis according to <paramref name="lens"/>. The circle can be
+    /// off-center (<paramref name="centerX"/>, <paramref name="centerY"/>, fractions of the frame)
+    /// and smaller or bigger than the frame (<paramref name="radiusScale"/>).
     /// </summary>
-    public static Mesh Fisheye(float radius, float fovDeg, int rings = 48, int segments = 96)
+    public static Mesh Fisheye(float radius, float fovDeg, int rings = 48, int segments = 96,
+        FisheyeLens lens = FisheyeLens.Equidistant, float centerX = 0f, float centerY = 0f, float radiusScale = 1f)
     {
         float maxTheta = fovDeg / 2f * VrMath.Deg2Rad;
+        float rMax = LensRadius(lens, maxTheta);
         int cols = segments + 1, rowCount = rings + 1;
         var v = new float[cols * rowCount * Mesh.FloatsPerVertex];
         int k = 0;
@@ -58,6 +63,8 @@ public static class MeshBuilder
         {
             float fr = (float)r / rings;
             float theta = fr * maxTheta;
+            // Distance from the circle center, 0..1 at the edge of the lens' field of view.
+            float rr = LensRadius(lens, theta) / rMax * radiusScale;
             for (int c = 0; c < cols; c++)
             {
                 float phi = (float)c / segments * MathF.Tau;
@@ -65,12 +72,29 @@ public static class MeshBuilder
                 v[k++] = radius * s * MathF.Cos(phi);
                 v[k++] = radius * s * MathF.Sin(phi);
                 v[k++] = -radius * MathF.Cos(theta);
-                v[k++] = 0.5f + 0.5f * fr * MathF.Cos(phi);
-                v[k++] = 0.5f + 0.5f * fr * MathF.Sin(phi);
+                // Clamp so a bigger circle never samples the other eye's half of the frame.
+                v[k++] = Math.Clamp(0.5f + centerX + 0.5f * rr * MathF.Cos(phi), 0f, 1f);
+                v[k++] = Math.Clamp(0.5f + centerY + 0.5f * rr * MathF.Sin(phi), 0f, 1f);
             }
         }
         return new Mesh { Vertices = v, Indices = GridIndices(cols, rowCount) };
     }
+
+    /// <summary>Image-plane distance for an angle θ from the lens axis (unnormalized).</summary>
+    public static float LensRadius(FisheyeLens lens, float theta) => lens switch
+    {
+        FisheyeLens.Equisolid => 2f * MathF.Sin(theta / 2f),
+        FisheyeLens.Stereographic => 2f * MathF.Tan(theta / 2f),
+        _ => theta,
+    };
+
+    /// <summary>
+    /// Disc (spherical cap) of angular radius <paramref name="angleDeg"/> around the -Z axis, with
+    /// polar texture coordinates (0.5, 0.5 at the center, radius 0.5 at the rim). Rotated to point
+    /// down, it hides the nadir.
+    /// </summary>
+    public static Mesh Cap(float radius, float angleDeg, int rings = 8, int segments = 48) =>
+        Fisheye(radius, angleDeg * 2f, rings, segments);
 
     /// <summary>Flat rectangle centered on the -Z axis at <paramref name="distance"/>.</summary>
     public static Mesh Quad(float width, float height, float distance)

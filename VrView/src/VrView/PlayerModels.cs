@@ -41,6 +41,7 @@ internal sealed record MenuModel(
     bool Shuffle,
     RepeatMode Repeat,
     int VolumePercent,
+    VideoFormat Format,
     string FormatLabel,
     // Where the format comes from: "auto", "carpeta" or "" (chosen for this video).
     string FormatNote,
@@ -61,7 +62,7 @@ internal sealed record MenuModel(
     bool SpotDeleteMode,
     int ThumbsVersion)
 {
-    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1,
+    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, VideoFormat.Default, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1,
         0.9f, [], 0, false, 0);
 
     public int SpotPageCount => Math.Max(1, (Spots.Length + VrMenuLayout.SpotsPerPage - 1) / VrMenuLayout.SpotsPerPage);
@@ -92,6 +93,15 @@ internal static class ControlSizes
 /// <summary>Spanish labels shared by the VR panel and the touch overlay.</summary>
 internal static class Labels
 {
+    private static string TuneHeader(VideoFormat f) => f.Projection switch
+    {
+        Projection.Fisheye =>
+            $"Ajuste fino · ojo de pez {f.FisheyeFov:0}° {FineTuning.LensLabel(f.Lens)} · centro {f.CenterX * 100:+0.0;-0.0;0}/{f.CenterY * 100:+0.0;-0.0;0} % · círculo {f.RadiusScale * 100:0} %",
+        Projection.Dome180 or Projection.Sphere360 =>
+            $"Ajuste fino · {f.Label} · cubre {f.EquirectHFov:0}° × {f.EquirectVFov:0}°",
+        _ => "Ajuste fino · video plano: solo aplica la tapa de abajo",
+    };
+
     public static string For(MenuAction a, MenuModel m) => a switch
     {
         MenuAction.Prev => "|◀ Anterior",
@@ -133,12 +143,27 @@ internal static class Labels
         MenuAction.SpotPageNext => "Pág. ▶",
         MenuAction.SpotDeleteMode => m.SpotDeleteMode ? "Borrar: sí" : "Borrar: no",
         MenuAction.Opacity => $"Opacidad: {m.Opacity * 100:0}%",
+        MenuAction.Tune => "Ajuste fino",
+        MenuAction.TuneHMinus => "Campo H −",
+        MenuAction.TuneHPlus => "Campo H +",
+        MenuAction.TuneVMinus => "Campo V −",
+        MenuAction.TuneVPlus => "Campo V +",
+        MenuAction.TuneLeft => "Imagen ←",
+        MenuAction.TuneRight => "Imagen →",
+        MenuAction.TuneUp => "Imagen ↑",
+        MenuAction.TuneDown => "Imagen ↓",
+        MenuAction.TuneRadiusMinus => "Círculo −",
+        MenuAction.TuneRadiusPlus => "Círculo +",
+        MenuAction.TuneLens => "Lente: " + FineTuning.LensLabel(m.Format.Lens),
+        MenuAction.TuneNadir => m.Format.NadirDeg > 0 ? $"Tapa abajo: {m.Format.NadirDeg:0}°" : "Tapa abajo: no",
+        MenuAction.TuneReset => "Restablecer",
         _ => "",
     };
 
     public static string Header(MenuPage page, MenuModel m) => page switch
     {
         MenuPage.Horizon => $"Horizonte · inclinación {m.Pitch:+0.0;-0.0;0}° · nivel {m.Roll:+0.0;-0.0;0}° · giro {m.Yaw:+0;-0;0}°",
+        MenuPage.Tune => TuneHeader(m.Format),
         MenuPage.Spots => m.Spots.Length == 0
             ? "Marcas · aún no hay: pulsa «＋ Marca» para guardar el momento actual"
             : $"Marcas · {m.Spots.Length} · página {m.SpotPage + 1}/{m.SpotPageCount}" +

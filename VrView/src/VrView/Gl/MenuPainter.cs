@@ -54,13 +54,16 @@ internal sealed class MenuPainter : IDisposable
                 MenuAction.Lens => m.LensLevel > 0,
                 MenuAction.Dwell => m.GazeClick,
                 MenuAction.SpotDeleteMode => m.SpotDeleteMode,
+                MenuAction.TuneNadir => m.Format.NadirDeg > 0,
                 _ => false,
             };
-            _fill.Color = b.Action == hovered ? Color.Argb(255, 79, 195, 247)
+            bool enabled = FineTuning.Applies(b.Action, m.Format.Projection);
+            _fill.Color = !enabled ? Color.Argb(255, 30, 36, 42)
+                : b.Action == hovered ? Color.Argb(255, 79, 195, 247)
                 : active ? Color.Argb(255, 38, 84, 110)
                 : Color.Argb(255, 44, 55, 66);
             c.DrawRoundRect(r, 18, 18, _fill);
-            _text.Color = b.Action == hovered ? Color.Black : Color.White;
+            _text.Color = !enabled ? Color.Argb(255, 90, 100, 110) : b.Action == hovered ? Color.Black : Color.White;
             _text.TextSize = Height * 0.062f;
             string label = Labels.For(b.Action, m);
             DrawFitted(c, label, r);
@@ -84,6 +87,20 @@ internal sealed class MenuPainter : IDisposable
         text.SetShadowLayer(6, 0, 0, Color.Black);
         c.DrawText("Inclina la cabeza hasta que esta línea quede sobre el horizonte del video", w / 2f, h / 2f - 40, text);
         c.DrawText("y quédate quieto · toca la pantalla para cancelar", w / 2f, h / 2f + 66, text);
+        return bmp;
+    }
+
+    /// <summary>Soft black disc used to hide the nadir: opaque center fading out at the rim.</summary>
+    public static Bitmap PaintNadirPatch()
+    {
+        const int size = 256;
+        var bmp = Bitmap.CreateBitmap(size, size, Bitmap.Config.Argb8888!)!;
+        var c = new Canvas(bmp);
+        using var paint = new Paint { AntiAlias = true };
+        paint.SetShader(new RadialGradient(size / 2f, size / 2f, size / 2f,
+            new int[] { Color.Argb(255, 8, 8, 10), Color.Argb(255, 8, 8, 10), Color.Argb(0, 8, 8, 10) },
+            new float[] { 0f, 0.75f, 1f }, Shader.TileMode.Clamp!));
+        c.DrawCircle(size / 2f, size / 2f, size / 2f, paint);
         return bmp;
     }
 

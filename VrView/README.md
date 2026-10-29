@@ -22,6 +22,8 @@ Android y OpenGL ES 2.0. No usa Unity, MAUI ni librerías externas: solo el SDK 
 | Formatos | Plano 2D, 180°, 360° y ojo de pez (190° por defecto, o el valor de la etiqueta). Mono, lado a lado (SBS/LR), arriba-abajo (TB/OU), y ojos invertidos (RL/BT). |
 | Detección automática | Por etiquetas en el nombre del archivo y, si faltan, por las proporciones del vídeo. Se puede cambiar a mano (botón **Formato**: auto → cada formato → auto). |
 | Formato por carpeta | El formato que eliges a mano se guarda para ese vídeo **y para su carpeta**: los demás vídeos de la carpeta sin etiquetas en el nombre lo usan automáticamente (se indica «(carpeta)»). Las etiquetas del nombre siempre mandan. Volver a «auto» lo olvida. |
+| Ajuste fino del formato | Para cámaras que no siguen el estándar exacto: **campo horizontal y vertical** de vídeos 180°/360° (p. ej. 200°×180° o 180°×120°), y en ojo de pez **ángulo, tipo de lente** (equidistante / equisólida / estereográfica), **posición** y **tamaño del círculo**. Se guarda con el formato del vídeo y de su carpeta. |
+| Tapa abajo (nadir) | Disco negro difuminado bajo tus pies (20°–50°) para tapar la zona «pellizcada» donde estaba el trípode o la mano. |
 | Tamaño y opacidad de los controles | **Controles: chicos / medianos / grandes** y **Opacidad: 100 / 80 / 60 / 40 %** (en Ajustes) cambian el menú VR y los botones táctiles. El menú VR tiene un **✕** para cerrarlo y los controles táctiles un botón **✕ Ocultar**. |
 | Visor VR | Pantalla partida para los dos ojos, con seguimiento de la cabeza por el sensor de rotación (giroscopio). Zoom (campo de visión), separación de lentes (IPD) y corrección de la distorsión de las lentes (no / suave / fuerte). |
 | Horizonte | **Fijar con la cabeza** (inclinas la cabeza hasta ver el horizonte derecho, te quedas quieto y se fija), **Recentrar** (pone el centro del vídeo donde miras) y corrección manual de inclinación, nivel (alabeo) y giro. Se guarda para cada vídeo. |
@@ -126,6 +128,24 @@ app.
 Si elegiste la carpeta con una versión anterior de VrView (que pedía solo lectura), **vuelve a
 elegirla** para darle permiso de escritura; mientras tanto los ajustes se guardan en la app como
 antes.
+
+### Ajuste fino del formato
+
+En **Ajustes → Ajuste fino** (menú VR o controles táctiles). Los botones que no aplican al formato
+actual aparecen apagados.
+
+- **Campo H − / +**: en 180°/360°, cuánto abarca el vídeo de lado a lado; en ojo de pez, el ángulo
+  del lente. Si la imagen se ve apretada hacia los lados, súbelo; si se ve estirada, bájalo.
+- **Campo V − / +** (180°/360°): cuánto abarca de arriba a abajo. Muchas cámaras no llegan a 180°:
+  si al mirar arriba o abajo se ve estirado o «pellizcado», bájalo.
+- **Imagen ← → ↑ ↓**, **Círculo − / +**, **Lente** (solo ojo de pez): centra y ajusta el círculo de la
+  imagen cuando la cámara no lo graba exactamente en el centro, y cambia la curva del lente.
+- **Tapa abajo**: no / 20° / 30° / 40° / 50°.
+- **Restablecer** vuelve al formato estándar.
+
+Los valores se guardan en el formato del vídeo (y como formato de su carpeta), así que también van
+en `vrview.json`, p. ej. `"Fisheye,SideBySide,0,200,lens=Equisolid,cx=0.01,r=1.03,nadir=30"`.
+Cambiar de formato con el botón **Formato** quita el ajuste fino.
 
 ### Ajustar el horizonte
 

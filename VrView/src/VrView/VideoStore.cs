@@ -39,13 +39,13 @@ internal sealed class VideoStore(Context context, AppSettings settings)
             ? f
             : settings.GetFolderFormat(MediaUtil.FolderKey(item.Location));
 
-    public void SetFolderFormat(MediaItem item, VideoFormat? format)
+    public void SetFolderFormat(MediaItem item, VideoFormat? format, bool flush = true)
     {
         if (File(item) is { CanWrite: true } file)
         {
             file.Data.SetFolderFormat(item.Name, format);
             file.MarkDirty();
-            file.Flush();
+            if (flush) file.Flush();
         }
         else settings.SetFolderFormat(MediaUtil.FolderKey(item.Location), format);
     }

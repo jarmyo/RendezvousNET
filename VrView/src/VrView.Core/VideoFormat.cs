@@ -23,13 +23,46 @@ public enum StereoMode
     TopBottom,
 }
 
+/// <summary>How a fisheye lens maps the angle from its axis to the distance from the image center.</summary>
+public enum FisheyeLens
+{
+    /// <summary>r ∝ θ (most VR180 / dual fisheye lenses).</summary>
+    Equidistant,
+    /// <summary>r ∝ sin(θ/2) (equal-area; some action cameras).</summary>
+    Equisolid,
+    /// <summary>r ∝ tan(θ/2) (keeps shapes, stretches the edges).</summary>
+    Stereographic,
+}
+
 /// <summary>Texture-space rectangle of one eye, in GL convention (origin at bottom-left).</summary>
 public readonly record struct UvRect(float ScaleU, float ScaleV, float OffsetU, float OffsetV);
 
-/// <summary>Complete description of a video layout.</summary>
-public readonly record struct VideoFormat(Projection Projection, StereoMode Stereo, bool SwapEyes = false, float FisheyeFov = 190f)
+/// <summary>
+/// Complete description of a video layout, including the "fine tuning" for cameras that do not
+/// follow the standard exactly (wider/narrower coverage, other fisheye lenses, off-center circles)
+/// and the size of the patch that hides the nadir (the pinched area under the camera).
+/// </summary>
+/// <param name="HFov">Horizontal coverage of an equirectangular video in degrees; 0 = standard (180 or 360).</param>
+/// <param name="VFov">Vertical coverage of an equirectangular video in degrees; 0 = standard (180).</param>
+/// <param name="CenterX">Fisheye circle center offset, as a fraction of the eye width (right is positive).</param>
+/// <param name="CenterY">Fisheye circle center offset, as a fraction of the eye height (up is positive).</param>
+/// <param name="RadiusScale">Fisheye circle radius relative to half the eye height.</param>
+/// <param name="NadirDeg">Angular radius of the patch drawn under the viewer; 0 = none.</param>
+public readonly record struct VideoFormat(Projection Projection, StereoMode Stereo, bool SwapEyes = false, float FisheyeFov = 190f,
+    float HFov = 0f, float VFov = 0f, FisheyeLens Lens = FisheyeLens.Equidistant,
+    float CenterX = 0f, float CenterY = 0f, float RadiusScale = 1f, float NadirDeg = 0f)
 {
     public static VideoFormat Default => new(Projection.Flat, StereoMode.Mono);
+
+    public float EquirectHFov => HFov > 0 ? HFov : Projection == Projection.Sphere360 ? 360f : 180f;
+    public float EquirectVFov => VFov > 0 ? VFov : 180f;
+
+    /// <summary>True when any fine-tuning value differs from the standard layout.</summary>
+    public bool IsTuned => HFov > 0 || VFov > 0 || Lens != FisheyeLens.Equidistant || CenterX != 0 || CenterY != 0 ||
+                           RadiusScale != 1f || NadirDeg > 0;
+
+    /// <summary>The same layout without fine tuning.</summary>
+    public VideoFormat WithoutTuning() => new(Projection, Stereo, SwapEyes, FisheyeFov);
 
     public bool IsStereo => Stereo != StereoMode.Mono;
 
@@ -119,7 +152,7 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
                 StereoMode.TopBottom => SwapEyes ? "BT" : "TB",
                 _ => "2D",
             };
-            return $"{p} {s}";
+            return IsTuned ? $"{p} {s} · ajustado" : $"{p} {s}";
         }
     }
 
@@ -139,10 +172,23 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
         new VideoFormat(Projection.Fisheye, StereoMode.SideBySide),
     };
 
-    /// <summary>Compact, culture-invariant serialization ("Dome180,SideBySide,0,190").</summary>
-    public string Serialize() =>
-        string.Join(',', Projection, Stereo, SwapEyes ? "1" : "0",
-            FisheyeFov.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    /// <summary>
+    /// Compact, culture-invariant serialization: "Dome180,SideBySide,0,190", followed by
+    /// "key=value" items only for the fine-tuning values that are set (e.g. ",h=200,nadir=30").
+    /// </summary>
+    public string Serialize()
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = new List<string> { Projection.ToString(), Stereo.ToString(), SwapEyes ? "1" : "0", FisheyeFov.ToString("0.##", ci) };
+        if (HFov > 0) parts.Add("h=" + HFov.ToString("0.##", ci));
+        if (VFov > 0) parts.Add("v=" + VFov.ToString("0.##", ci));
+        if (Lens != FisheyeLens.Equidistant) parts.Add("lens=" + Lens);
+        if (CenterX != 0) parts.Add("cx=" + CenterX.ToString("0.####", ci));
+        if (CenterY != 0) parts.Add("cy=" + CenterY.ToString("0.####", ci));
+        if (RadiusScale != 1f) parts.Add("r=" + RadiusScale.ToString("0.###", ci));
+        if (NadirDeg > 0) parts.Add("nadir=" + NadirDeg.ToString("0.##", ci));
+        return string.Join(',', parts);
+    }
 
     public static VideoFormat? TryParse(string? text)
     {
@@ -156,6 +202,30 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
         if (parts.Length > 3 && float.TryParse(parts[3], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var f) && f > 90 && f <= 360)
             fov = f;
-        return new VideoFormat(p, s, swap, fov);
+        var result = new VideoFormat(p, s, swap, fov);
+        foreach (var item in parts.Skip(4))
+        {
+            int eq = item.IndexOf('=');
+            if (eq <= 0) continue;
+            string key = item[..eq].Trim(), value = item[(eq + 1)..].Trim();
+            if (key == "lens")
+            {
+                if (Enum.TryParse<FisheyeLens>(value, true, out var lens)) result = result with { Lens = lens };
+                continue;
+            }
+            if (!float.TryParse(value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var n)) continue;
+            result = key switch
+            {
+                "h" => result with { HFov = Math.Clamp(n, 0, 360) },
+                "v" => result with { VFov = Math.Clamp(n, 0, 180) },
+                "cx" => result with { CenterX = Math.Clamp(n, -0.25f, 0.25f) },
+                "cy" => result with { CenterY = Math.Clamp(n, -0.25f, 0.25f) },
+                "r" => result with { RadiusScale = Math.Clamp(n, 0.5f, 1.5f) },
+                "nadir" => result with { NadirDeg = Math.Clamp(n, 0, 90) },
+                _ => result,
+            };
+        }
+        return result;
     }
 }

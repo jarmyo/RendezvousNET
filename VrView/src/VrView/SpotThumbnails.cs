@@ -34,6 +34,8 @@ internal sealed class SpotThumbnails(Context context)
     /// <summary>Switches to another video or format; thumbnails of the previous one are dropped.</summary>
     public void SetVideo(string location, VideoFormat format)
     {
+        // Fine tuning does not change the thumbnail crop.
+        format = format.WithoutTuning();
         if (location == _location && format == _format) return;
         Interlocked.Increment(ref _generation);
         _location = location;

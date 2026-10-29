@@ -11,6 +11,8 @@ public enum MenuAction
     ZoomOut, ZoomIn, IpdMinus, IpdPlus, Lens, Dwell,
     SetHorizon, MenuSize, Hide,
     Spots, SpotAdd, SpotPrev, SpotNext, SpotPagePrev, SpotPageNext, SpotDeleteMode, SpotSlot, Opacity,
+    Tune, TuneHMinus, TuneHPlus, TuneVMinus, TuneVPlus, TuneLeft, TuneRight, TuneUp, TuneDown,
+    TuneRadiusMinus, TuneRadiusPlus, TuneLens, TuneNadir, TuneReset,
 }
 
 public enum MenuPage
@@ -19,6 +21,7 @@ public enum MenuPage
     Horizon,
     Settings,
     Spots,
+    Tune,
 }
 
 /// <summary>A button rectangle in panel coordinates (0..1, origin top-left).</summary>
@@ -83,7 +86,15 @@ public static class VrMenuLayout
                 (MenuAction.ZoomOut, true), (MenuAction.ZoomIn, true), (MenuAction.IpdMinus, true),
                 (MenuAction.IpdPlus, true), (MenuAction.Lens, false), (MenuAction.Dwell, false))
             .Concat(Row(Row2Top, Row2Bottom,
-                (MenuAction.Format, false), (MenuAction.MenuSize, false), (MenuAction.Opacity, false), (MenuAction.Back, false)))
+                (MenuAction.Format, false), (MenuAction.Tune, false), (MenuAction.MenuSize, false), (MenuAction.Opacity, false),
+                (MenuAction.Back, false)))
+            .Append(CloseButton).ToArray(),
+        [MenuPage.Tune] = Row(Row1Top, Row1Bottom,
+                (MenuAction.TuneHMinus, true), (MenuAction.TuneHPlus, true), (MenuAction.TuneVMinus, true), (MenuAction.TuneVPlus, true),
+                (MenuAction.TuneLeft, true), (MenuAction.TuneRight, true), (MenuAction.TuneUp, true), (MenuAction.TuneDown, true))
+            .Concat(Row(Row2Top, Row2Bottom,
+                (MenuAction.TuneRadiusMinus, true), (MenuAction.TuneRadiusPlus, true), (MenuAction.TuneLens, false),
+                (MenuAction.TuneNadir, false), (MenuAction.Format, false), (MenuAction.TuneReset, false), (MenuAction.Back, false)))
             .Append(CloseButton).ToArray(),
         [MenuPage.Spots] = SpotSlots()
             .Concat(Row(Row2Top, Row2Bottom,

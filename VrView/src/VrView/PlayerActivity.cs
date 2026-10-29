@@ -510,6 +510,16 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             case MenuAction.SpotPageNext: _spotPage = Math.Min(BuildMenuModel().SpotPageCount - 1, _spotPage + 1); break;
             case MenuAction.SpotDeleteMode: _spotDeleteMode = !_spotDeleteMode; break;
             case MenuAction.SpotSlot: UseSpot(_spotPage * VrMenuLayout.SpotsPerPage + slot, source); break;
+            case MenuAction.Tune:
+                if (source == Source.Touch) ShowSubRow(_subPage == MenuPage.Tune ? null : MenuPage.Tune);
+                else if (source == Source.Key) _glView.QueueEvent(() => _renderer.ShowMenu(MenuPage.Tune));
+                break;
+            case MenuAction.TuneHMinus or MenuAction.TuneHPlus or MenuAction.TuneVMinus or MenuAction.TuneVPlus or
+                MenuAction.TuneLeft or MenuAction.TuneRight or MenuAction.TuneUp or MenuAction.TuneDown or
+                MenuAction.TuneRadiusMinus or MenuAction.TuneRadiusPlus or MenuAction.TuneLens or
+                MenuAction.TuneNadir or MenuAction.TuneReset:
+                ApplyTuning(action);
+                break;
             case MenuAction.Opacity:
                 _settings.ControlsOpacity = ControlSizes.NextOpacity(_settings.ControlsOpacity);
                 ApplyOverlaySize();
@@ -545,6 +555,20 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _state.Roll = VideoState.NormalizeAngle(_state.Roll + roll);
         _state.Yaw = VideoState.NormalizeAngle(_state.Yaw + yaw);
         SaveVideoState();
+    }
+
+    /// <summary>
+    /// "Ajuste fino": the tuned format becomes this video's format and, like a format chosen by hand,
+    /// the default for the other untagged videos of its folder.
+    /// </summary>
+    private void ApplyTuning(MenuAction action)
+    {
+        if (FineTuning.Apply(CurrentFormat, action) is not { } tuned || Current is not { } item) return;
+        // Buttons auto-repeat while looked at, so the folder file is written by the periodic flush.
+        _state.FormatOverride = tuned;
+        _store.Save(item, _state);
+        _folderFormat = tuned;
+        _store.SetFolderFormat(item, tuned, flush: false);
     }
 
     // ---- Spots ("marcas") ----
@@ -664,7 +688,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         }
         // Round the position to whole seconds so the panel is only repainted when the text changes.
         return new MenuModel(Current?.Name ?? "", Position / 1000 * 1000, Duration, IsPlaying, _playlist.Shuffle,
-            _playlist.Repeat, vol, CurrentFormat.Label, FormatNote, _state.Pitch, _state.Roll,
+            _playlist.Repeat, vol, CurrentFormat, CurrentFormat.Label, FormatNote, _state.Pitch, _state.Roll,
             _state.Yaw, _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
             Math.Max(0, _playlist.Order.ToList().IndexOf(_playlist.CurrentIndex)), _playlist.Count,
             _settings.ControlsSize, _settings.ControlsOpacity, _spots, _spotPage, _spotDeleteMode, _thumbs.Version);
@@ -910,7 +934,11 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         }
         ((TextView)_subRow.GetChildAt(0)!).Text = Labels.Header(page, model).Split(" · ", 2) is { Length: 2 } parts ? parts[1] : "";
         for (int i = 0; i < actions.Count; i++)
-            ((Button)_subRow.GetChildAt(i + 1)!).Text = actions[i] == MenuAction.Back ? "Cerrar" : Labels.For(actions[i], model);
+        {
+            var button = (Button)_subRow.GetChildAt(i + 1)!;
+            button.Text = actions[i] == MenuAction.Back ? "Cerrar" : Labels.For(actions[i], model);
+            button.Enabled = FineTuning.Applies(actions[i], model.Format.Projection);
+        }
     }
 
     /// <summary>
