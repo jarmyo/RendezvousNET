@@ -33,12 +33,22 @@ dotnet publish -c Release -r win-x64 --self-contained     # Windows
 ## Uso
 
 1. Arriba elige **Esta computadora** o **Teléfono Android** y la carpeta (doble clic para entrar en subcarpetas).
-2. Selecciona un video: aparecen las miniaturas en el timeline y la vista previa del cuadro.
-3. Haz clic o arrastra en el timeline para mover el cabezal (flechas: ±1 s, Shift+flechas: ±10 s).
-4. Pulsa **Marcar inicio (I)** y **Marcar fin (O)** para cada parte a borrar (se ve en rojo).
+2. Ordena la lista por **nombre, fecha o tamaño** (el botón de al lado invierte el orden).
+3. Selecciona un video y pulsa **📥 Importar** (o Enter / doble clic): aparecen las miniaturas en el
+   timeline y la vista previa del cuadro. Un clic simple solo selecciona, no carga nada.
+4. Haz clic o arrastra en el timeline para mover el cabezal (flechas: ±1 s, Shift+flechas: ±10 s).
+5. Pulsa **Marcar inicio (I)** y **Marcar fin (O)** para cada parte a borrar (se ve en rojo).
    **✂ Inicio → aquí** quita la intro de un solo clic.
-5. **Exportar sin pérdida**: guarda `cut_<nombre>.mp4` junto al original (o lo reemplaza).
+6. **Exportar sin pérdida**: guarda `cut_<nombre>.mp4` junto al original (o lo reemplaza).
    Si el video viene del teléfono, el resultado se envía de vuelta a la misma carpeta.
+
+### Renombrar y borrar
+
+- **✏️ Renombrar** (F2 o clic derecho): el nombre aparece seleccionado sin la extensión.
+- **🗑 Borrar** (Supr o clic derecho): puedes seleccionar varios videos con Cmd/Ctrl+clic o Shift+clic.
+  En Mac van a la Papelera (la primera vez macOS pide permiso para controlar Finder) y en Windows a la
+  Papelera de reciclaje. **En el teléfono se borran definitivamente**: Android no tiene papelera por USB.
+- Las carpetas se pueden renombrar pero no borrar, para evitar accidentes.
 
 ### Keyframes
 

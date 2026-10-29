@@ -44,17 +44,50 @@
 
     <Grid ColumnDefinitions="300,4,*">
       <!-- File browser -->
-      <ListBox x:Name="FileList" Grid.Column="0" SelectionChanged="OnFileSelected" DoubleTapped="OnFileDoubleTapped">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="local:BrowserEntry">
-            <Grid ColumnDefinitions="Auto,*,Auto" ToolTip.Tip="{Binding Name}">
-              <TextBlock Text="{Binding Icon}" Margin="0,0,8,0" />
-              <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="2" Text="{Binding SizeText}" Classes="hint" Margin="8,0,0,0" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+      <DockPanel Grid.Column="0">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="6,6,6,0">
+          <TextBlock Text="Ordenar:" Classes="hint" VerticalAlignment="Center" Margin="0,0,6,6" />
+          <ComboBox x:Name="SortBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,6"
+                    SelectedIndex="0" SelectionChanged="OnSortChanged">
+            <ComboBoxItem>Nombre</ComboBoxItem>
+            <ComboBoxItem>Fecha</ComboBoxItem>
+            <ComboBoxItem>Tamaño</ComboBoxItem>
+          </ComboBox>
+          <Button x:Name="SortDirButton" Grid.Column="2" Content="↑ A-Z" MinWidth="64" Margin="0,0,0,6"
+                  ToolTip.Tip="Cambiar orden ascendente / descendente" Click="OnSortDirection" />
+        </Grid>
+
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto,Auto" Margin="6,6,0,0">
+          <Button x:Name="ImportButton" Classes="accent" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center" IsEnabled="False"
+                  Content="📥 Importar" ToolTip.Tip="Abrir el video seleccionado en el editor (Enter o doble clic)"
+                  Click="OnImport" />
+          <Button x:Name="RenameButton" Grid.Column="1" Content="✏️" IsEnabled="False"
+                  ToolTip.Tip="Renombrar (F2)" Click="OnRename" />
+          <Button x:Name="DeleteButton" Grid.Column="2" Content="🗑" IsEnabled="False"
+                  ToolTip.Tip="Borrar (Supr)" Click="OnDelete" />
+        </Grid>
+
+        <ListBox x:Name="FileList" SelectionMode="Multiple" SelectionChanged="OnFileSelected"
+                 DoubleTapped="OnFileDoubleTapped" KeyDown="OnFileListKeyDown">
+          <ListBox.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="📥 Importar" Click="OnImport" />
+              <MenuItem Header="✏️ Renombrar…" InputGesture="F2" Click="OnRename" />
+              <MenuItem Header="🗑 Borrar…" InputGesture="Delete" Click="OnDelete" />
+            </ContextMenu>
+          </ListBox.ContextMenu>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="local:BrowserEntry">
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ToolTip.Tip="{Binding Name}">
+                <TextBlock Grid.RowSpan="2" Text="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding DetailText}" Classes="hint" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
 
       <GridSplitter Grid.Column="1" Background="#2A2A30" ResizeDirection="Columns" />
 
@@ -64,7 +97,7 @@
           <Panel>
             <Image x:Name="PreviewImage" Stretch="Uniform" />
             <TextBlock x:Name="PlaceholderText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       Classes="hint" FontSize="16" Text="Elige una carpeta y selecciona un video" />
+                       Classes="hint" FontSize="16" Text="Selecciona un video y pulsa Importar" />
           </Panel>
         </Border>
 

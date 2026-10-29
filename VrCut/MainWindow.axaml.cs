@@ -8,10 +8,12 @@ using VrCut.Services;
 
 namespace VrCut;
 
-public sealed record BrowserEntry(string Name, string FullPath, bool IsFolder, long Size)
+public sealed record BrowserEntry(string Name, string FullPath, bool IsFolder, long Size, DateTime Modified)
 {
     public string Icon => IsFolder ? "📁" : "🎬";
-    public string SizeText => IsFolder ? "" : MainWindow.FormatSize(Size);
+    public string DetailText => IsFolder
+        ? $"{Modified:dd MMM yyyy HH:mm}"
+        : $"{Modified:dd MMM yyyy HH:mm}  ·  {MainWindow.FormatSize(Size)}";
 }
 
 public partial class MainWindow : Window
@@ -21,6 +23,9 @@ public partial class MainWindow : Window
     private static readonly string[] VideoExtensions = [".mp4", ".m4v", ".mov"];
 
     private readonly ObservableCollection<BrowserEntry> _entries = [];
+    private List<BrowserEntry> _allEntries = [];
+    private int _sortKey; // 0 = name, 1 = date, 2 = size
+    private bool _sortDescending;
     private readonly ObservableCollection<CutRange> _cuts = [];
     private readonly string _cacheDir = Path.Combine(Path.GetTempPath(), $"vrcut-{Environment.ProcessId}");
 
@@ -75,7 +80,7 @@ public partial class MainWindow : Window
                 return;
             }
             var remote = await AdbService.ListAsync(folder);
-            items = remote.Select(r => new BrowserEntry(r.Name, r.FullPath, r.IsFolder, r.Size)).ToList();
+            items = remote.Select(r => new BrowserEntry(r.Name, r.FullPath, r.IsFolder, r.Size, r.Modified)).ToList();
             _deviceFolder = folder.Length > 1 ? folder.TrimEnd('/') : folder;
         }
         else
@@ -83,22 +88,67 @@ public partial class MainWindow : Window
             var dir = new DirectoryInfo(folder);
             items = dir.EnumerateDirectories()
                 .Where(d => !d.Name.StartsWith('.') && !d.Attributes.HasFlag(FileAttributes.Hidden))
-                .Select(d => new BrowserEntry(d.Name, d.FullName, true, 0))
-                .Concat(dir.EnumerateFiles().Select(f => new BrowserEntry(f.Name, f.FullName, false, f.Length)))
+                .Select(d => new BrowserEntry(d.Name, d.FullName, true, 0, d.LastWriteTime))
+                .Concat(dir.EnumerateFiles().Select(f => new BrowserEntry(f.Name, f.FullName, false, f.Length, f.LastWriteTime)))
                 .ToList();
             _localFolder = dir.FullName;
         }
 
-        var sorted = items
+        _allEntries = items
             .Where(e => e.IsFolder || VideoExtensions.Contains(Path.GetExtension(e.Name).ToLowerInvariant()))
-            .OrderByDescending(e => e.IsFolder)
-            .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase);
+            .ToList();
+        ApplySort();
+        PathBox.Text = CurrentFolder;
+        SetStatus($"{_allEntries.Count(e => !e.IsFolder)} videos en {CurrentFolder}");
+    }
+
+    private void ApplySort()
+    {
+        // Folders always stay on top; the chosen key orders folders and videos separately.
+        IOrderedEnumerable<BrowserEntry> ordered = _allEntries.OrderByDescending(e => e.IsFolder);
+        ordered = (_sortKey, _sortDescending) switch
+        {
+            (1, false) => ordered.ThenBy(e => e.Modified),
+            (1, true) => ordered.ThenByDescending(e => e.Modified),
+            (2, false) => ordered.ThenBy(e => e.Size),
+            (2, true) => ordered.ThenByDescending(e => e.Size),
+            (_, false) => ordered.ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase),
+            (_, true) => ordered.ThenByDescending(e => e.Name, StringComparer.OrdinalIgnoreCase),
+        };
+        var keepSelected = FileList.SelectedItems?.Cast<BrowserEntry>().Select(e => e.FullPath).ToHashSet() ?? [];
 
         _entries.Clear();
-        foreach (var e in sorted)
+        foreach (var e in ordered.ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
             _entries.Add(e);
-        PathBox.Text = CurrentFolder;
-        SetStatus($"{_entries.Count(e => !e.IsFolder)} videos en {CurrentFolder}");
+        foreach (var e in _entries.Where(e => keepSelected.Contains(e.FullPath)))
+            FileList.SelectedItems?.Add(e);
+
+        SortDirButton.Content = (_sortKey, _sortDescending) switch
+        {
+            (1, false) => "↑ Antiguo",
+            (1, true) => "↓ Reciente",
+            (2, false) => "↑ Chico",
+            (2, true) => "↓ Grande",
+            (_, false) => "↑ A-Z",
+            (_, true) => "↓ Z-A",
+        };
+        UpdateFileButtons();
+    }
+
+    private void OnSortChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (SortDirButton is null)
+            return; // Fired during InitializeComponent.
+        _sortKey = SortBox.SelectedIndex;
+        // Newest and largest first are the useful defaults for date and size.
+        _sortDescending = _sortKey != 0;
+        ApplySort();
+    }
+
+    private void OnSortDirection(object? sender, RoutedEventArgs e)
+    {
+        _sortDescending = !_sortDescending;
+        ApplySort();
     }
 
     private void OnSourceChanged(object? sender, SelectionChangedEventArgs e)
@@ -157,33 +207,167 @@ public partial class MainWindow : Window
         }
     }
 
+    private IReadOnlyList<BrowserEntry> SelectedEntries =>
+        FileList.SelectedItems?.Cast<BrowserEntry>().ToList() ?? [];
+
+    private BrowserEntry? SingleSelected => SelectedEntries is [var only] ? only : null;
+
     private void OnFileDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (FileList.SelectedItem is BrowserEntry { IsFolder: true } entry)
-            Run(() => LoadFolderAsync(entry.FullPath));
+        if (SingleSelected is { IsFolder: true } folder)
+            Run(() => LoadFolderAsync(folder.FullPath));
+        else
+            OnImport(sender, e);
     }
 
-    private void OnFileSelected(object? sender, SelectionChangedEventArgs e)
+    private void OnFileSelected(object? sender, SelectionChangedEventArgs e) => UpdateFileButtons();
+
+    private void UpdateFileButtons()
     {
-        if (FileList.SelectedItem is BrowserEntry { IsFolder: false } entry && !_busy)
-            Run(() => OpenVideoAsync(entry));
+        var selected = SelectedEntries;
+        ImportButton.IsEnabled = !_busy && SingleSelected is { IsFolder: false };
+        RenameButton.IsEnabled = !_busy && SingleSelected is not null;
+        DeleteButton.IsEnabled = !_busy && selected.Count > 0 && selected.All(x => !x.IsFolder);
+    }
+
+    private void OnFileListKeyDown(object? sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter when SingleSelected is { IsFolder: true } folder:
+                Run(() => LoadFolderAsync(folder.FullPath));
+                break;
+            case Key.Enter: OnImport(sender, e); break;
+            case Key.F2: OnRename(sender, e); break;
+            case Key.Delete or Key.Back: OnDelete(sender, e); break;
+            default: return;
+        }
+        e.Handled = true;
+    }
+
+    // ---------- Import, rename and delete ----------
+
+    private string? CurrentSourcePath => _remoteFile ?? _localFile;
+
+    private async void OnImport(object? sender, RoutedEventArgs e)
+    {
+        if (_busy || SingleSelected is not { IsFolder: false } entry)
+            return;
+        if (_info is not null && _cuts.Count > 0 && entry.FullPath != CurrentSourcePath &&
+            !await Dialogs.ConfirmAsync(this, "Cortes sin exportar",
+                $"Tienes {_cuts.Count} corte(s) marcados en el video actual que no has exportado. ¿Descartarlos e importar '{entry.Name}'?",
+                "Descartar e importar"))
+            return;
+        Run(() => OpenVideoAsync(entry));
+    }
+
+    private async void OnRename(object? sender, RoutedEventArgs e)
+    {
+        if (_busy || SingleSelected is not { } entry)
+            return;
+
+        int nameLength = entry.IsFolder ? entry.Name.Length : Path.GetFileNameWithoutExtension(entry.Name).Length;
+        string? newName = (await Dialogs.PromptAsync(this, "Renombrar", $"Nuevo nombre para '{entry.Name}':",
+            entry.Name, nameLength))?.Trim();
+        if (string.IsNullOrEmpty(newName) || newName == entry.Name)
+            return;
+        if (newName.IndexOfAny(['/', '\\', ':']) >= 0)
+        {
+            SetStatus("❌ El nombre no puede contener / \\ ni :");
+            return;
+        }
+
+        Run(async () =>
+        {
+            if (_deviceMode)
+                await AdbService.RenameAsync(entry.FullPath, newName);
+            else
+                LocalFiles.Rename(entry.FullPath, newName);
+
+            // Keep the open video working under its new name.
+            string newPath = _deviceMode
+                ? entry.FullPath[..(entry.FullPath.LastIndexOf('/') + 1)] + newName
+                : Path.Combine(Path.GetDirectoryName(entry.FullPath)!, newName);
+            if (entry.FullPath == CurrentSourcePath)
+            {
+                if (_remoteFile is not null)
+                    _remoteFile = newPath;
+                else
+                    _localFile = newPath;
+                InfoText.Text = InfoText.Text?.Replace(entry.Name, newName);
+            }
+
+            await LoadFolderAsync(CurrentFolder);
+            if (_entries.FirstOrDefault(x => x.FullPath == newPath) is { } renamed)
+                FileList.SelectedItem = renamed;
+            SetStatus($"✏️ Renombrado: {entry.Name} → {newName}");
+        });
+    }
+
+    private async void OnDelete(object? sender, RoutedEventArgs e)
+    {
+        var files = SelectedEntries.Where(x => !x.IsFolder).ToList();
+        if (_busy || files.Count == 0)
+            return;
+
+        string what = files.Count == 1 ? $"'{files[0].Name}'" : $"{files.Count} videos";
+        string total = FormatSize(files.Sum(f => f.Size));
+        string where = _deviceMode
+            ? "Se borrará DEFINITIVAMENTE del teléfono (Android no tiene papelera por USB)."
+            : LocalFiles.UsesTrash ? "Se moverá a la papelera." : "Se borrará definitivamente.";
+        if (!await Dialogs.ConfirmAsync(this, "Borrar", $"¿Borrar {what} ({total})?\n\n{where}", "Borrar", danger: true))
+            return;
+
+        Run(async () =>
+        {
+            SetBusy(true);
+            try
+            {
+                foreach (var f in files)
+                {
+                    SetStatus($"Borrando {f.Name}…");
+                    if (f.FullPath == CurrentSourcePath)
+                        CloseVideo();
+                    if (_deviceMode)
+                        await AdbService.DeleteAsync(f.FullPath);
+                    else
+                        await LocalFiles.MoveToTrashAsync(f.FullPath);
+                }
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+            await LoadFolderAsync(CurrentFolder);
+            SetStatus($"🗑 Borrado: {what} ({total})");
+        });
+    }
+
+    private void CloseVideo()
+    {
+        _loadCts?.Cancel();
+        _localFile = null;
+        _remoteFile = null;
+        _info = null;
+        _keyframes = [];
+        _cuts.Clear();
+        Timeline.Reset(0, 0);
+        UpdateCuts();
+        (PreviewImage.Source as IDisposable)?.Dispose();
+        PreviewImage.Source = null;
+        PlaceholderText.IsVisible = true;
+        InfoText.Text = "";
+        TimeText.Text = TimeFormat.Format(0);
+        ExportButton.IsEnabled = false;
     }
 
     // ---------- Loading a video ----------
 
     private async Task OpenVideoAsync(BrowserEntry entry)
     {
-        _loadCts?.Cancel();
+        CloseVideo();
         var cts = _loadCts = new CancellationTokenSource();
         var ct = cts.Token;
-
-        ExportButton.IsEnabled = false;
-        _info = null;
-        _keyframes = [];
-        _cuts.Clear();
-        Timeline.Reset(0, 0);
-        PreviewImage.Source = null;
-        PlaceholderText.IsVisible = true;
 
         string local = entry.FullPath;
         if (_deviceMode)
@@ -480,7 +664,7 @@ public partial class MainWindow : Window
         string source = _localFile;
         string? remote = _remoteFile;
         bool replace = ReplaceRadio.IsChecked == true;
-        string name = Path.GetFileName(source);
+        string name = Path.GetFileName(remote ?? source);
         // Prefix (not suffix) so VR tags at the end of the name (_180_LR, _360_TB…) keep working.
         string outName = replace ? name : "cut_" + name;
         var keep = CutEngine.ComputeKeepRanges(_cuts, _info.Duration);
@@ -535,14 +719,7 @@ public partial class MainWindow : Window
         }
 
         if (replace)
-        {
-            _info = null;
-            _cuts.Clear();
-            Timeline.Reset(0, 0);
-            UpdateCuts();
-            ExportButton.IsEnabled = false;
-            PlaceholderText.IsVisible = true;
-        }
+            CloseVideo();
         string status = StatusText.Text ?? "";
         await LoadFolderAsync(CurrentFolder);
         SetStatus(status);
@@ -579,9 +756,10 @@ public partial class MainWindow : Window
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        ExportButton.IsEnabled = !busy;
+        ExportButton.IsEnabled = !busy && _info is not null;
         FileList.IsEnabled = !busy;
         SourceBox.IsEnabled = !busy;
+        UpdateFileButtons();
         Progress.IsVisible = busy;
         Progress.Value = 0;
     }
