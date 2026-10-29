@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <!-- Android 8.0+: needed for precise MediaPlayer seeking and adaptive icons. -->
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>VrView</RootNamespace>
+    <ApplicationId>net.rendezvous.vrview</ApplicationId>
+    <ApplicationTitle>VrView</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Only 64-bit ARM phones (every phone that can drive a VR viewer) plus x64 for emulators. -->
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+    <!-- Produce an installable .apk (not an .aab) in Release, ready for "adb install". -->
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <TrimMode>full</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VrView.Core\VrView.Core.csproj" />
+  </ItemGroup>
+</Project>
