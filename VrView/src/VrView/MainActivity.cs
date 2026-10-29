@@ -20,6 +20,7 @@ public class MainActivity : Activity
     private const int RequestPickFolder = 1;
 
     private AppSettings _settings = null!;
+    private VideoStore _store = null!;
     private readonly List<MediaItem> _items = new();
     private VideoListAdapter _adapter = null!;
     private TextView _folderText = null!, _emptyText = null!;
@@ -32,6 +33,7 @@ public class MainActivity : Activity
     {
         base.OnCreate(savedInstanceState);
         _settings = new AppSettings(this);
+        _store = new VideoStore(this, _settings);
         SetContentView(BuildLayout());
         UpdateToggleLabels();
 
@@ -120,7 +122,7 @@ public class MainActivity : Activity
         root.AddView(_emptyText);
 
         var list = new ListView(this);
-        _adapter = new VideoListAdapter(this, _items, _settings);
+        _adapter = new VideoListAdapter(this, _items, _store);
         list.Adapter = _adapter;
         list.ItemClick += (_, e) => Play(e.Position);
         root.AddView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
@@ -154,8 +156,8 @@ public class MainActivity : Activity
     {
         string? uri = _settings.LastVideoUri;
         if (uri is null) { _resumeButton.Visibility = ViewStates.Gone; return; }
-        var state = _settings.GetVideo(uri);
         string name = _settings.LastVideoName ?? "último vídeo";
+        var state = _store.Get(new MediaItem(uri, name));
         _resumeButton.Text = state.PositionMs > 0
             ? $"Continuar: {name} ({MediaUtil.FormatTime(state.PositionMs)})"
             : $"Continuar: {name}";
@@ -173,7 +175,9 @@ public class MainActivity : Activity
     private void PickFolder()
     {
         var intent = new Intent(Intent.ActionOpenDocumentTree);
-        intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantPersistableUriPermission);
+        // Write access lets the app keep its settings in vrview.json inside the folder.
+        intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission |
+                        ActivityFlags.GrantPersistableUriPermission);
         try
         {
 #pragma warning disable CA1422 // StartActivityForResult is fine for this simple flow.
@@ -192,7 +196,7 @@ public class MainActivity : Activity
         if (requestCode != RequestPickFolder || resultCode != Result.Ok || data?.Data is not { } tree) return;
         try
         {
-            ContentResolver!.TakePersistableUriPermission(tree, ActivityFlags.GrantReadUriPermission);
+            ContentResolver!.TakePersistableUriPermission(tree, ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission);
         }
         catch (Java.Lang.SecurityException)
         {
@@ -218,7 +222,12 @@ public class MainActivity : Activity
         {
             List<MediaItem>? found = null;
             string? error = null;
-            try { found = FolderScanner.Scan(ContentResolver!, tree, recursive, cts.Token); }
+            try
+            {
+                // Read vrview.json again: it may have been edited or copied in from another device.
+                FolderSettingsFile.Reload(ContentResolver!, tree.ToString()!);
+                found = FolderScanner.Scan(ContentResolver!, tree, recursive, cts.Token);
+            }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { error = ex.Message; }
 
@@ -267,13 +276,13 @@ internal sealed class VideoListAdapter : BaseAdapter<MediaItem>
 {
     private readonly Context _context;
     private readonly List<MediaItem> _items;
-    private readonly AppSettings _settings;
+    private readonly VideoStore _store;
 
-    public VideoListAdapter(Context context, List<MediaItem> items, AppSettings settings)
+    public VideoListAdapter(Context context, List<MediaItem> items, VideoStore store)
     {
         _context = context;
         _items = items;
-        _settings = settings;
+        _store = store;
     }
 
     public override MediaItem this[int position] => _items[position];
@@ -305,14 +314,16 @@ internal sealed class VideoListAdapter : BaseAdapter<MediaItem>
         }
 
         var item = _items[position];
-        var state = _settings.GetVideo(item.Location);
-        var format = state.FormatOverride ?? FormatDetector.Detect(item.Name);
-        string formatText = state.FormatOverride is null
-            ? (FormatDetector.HasTags(item.Name) ? format.Label : "formato automático")
-            : format.Label + " (manual)";
+        var state = _store.Get(item);
+        var folderFormat = FormatDetector.HasTags(item.Name) ? null : _store.GetFolderFormat(item);
+        var format = state.FormatOverride ?? folderFormat ?? FormatDetector.Detect(item.Name);
+        string formatText = state.FormatOverride is not null ? format.Label + " (manual)"
+            : folderFormat is not null ? format.Label + " (carpeta)"
+            : FormatDetector.HasTags(item.Name) ? format.Label : "formato automático";
         var parts = new List<string> { formatText };
         if (item.SizeBytes > 0) parts.Add($"{item.SizeBytes / (1024.0 * 1024.0):0} MB");
         if (state.PositionMs > 0) parts.Add("continuar en " + MediaUtil.FormatTime(state.PositionMs));
+        if (state.Spots.Count > 0) parts.Add(state.Spots.Count == 1 ? "1 marca" : $"{state.Spots.Count} marcas");
         title.Text = item.Name;
         detail.Text = string.Join(" · ", parts);
         return row;

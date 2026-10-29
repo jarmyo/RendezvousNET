@@ -108,6 +108,18 @@ internal sealed class AppSettings
     public void SaveVideo(string location, VideoState state) =>
         _videos.Edit()!.PutString(location, state.Serialize())!.Apply();
 
+    public void RemoveVideo(string location)
+    {
+        if (_videos.Contains(location)) _videos.Edit()!.Remove(location)!.Apply();
+    }
+
+    /// <summary>Opacity of the VR menu and the touch controls (0.3 to 1).</summary>
+    public float ControlsOpacity
+    {
+        get => _prefs.GetFloat("controlsOpacity", 0.9f);
+        set => Edit(e => e.PutFloat("controlsOpacity", value));
+    }
+
     private void Edit(Action<ISharedPreferencesEditor> change)
     {
         var e = _prefs.Edit()!;

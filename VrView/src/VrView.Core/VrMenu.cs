@@ -10,6 +10,7 @@ public enum MenuAction
     PitchUp, PitchDown, RollLeft, RollRight, YawLeft, YawRight, ResetHorizon, Back,
     ZoomOut, ZoomIn, IpdMinus, IpdPlus, Lens, Dwell,
     SetHorizon, MenuSize, Hide,
+    Spots, SpotAdd, SpotPrev, SpotNext, SpotPagePrev, SpotPageNext, SpotDeleteMode, SpotSlot, Opacity,
 }
 
 public enum MenuPage
@@ -17,12 +18,19 @@ public enum MenuPage
     Main,
     Horizon,
     Settings,
+    Spots,
 }
 
 /// <summary>A button rectangle in panel coordinates (0..1, origin top-left).</summary>
-public readonly record struct MenuButton(MenuAction Action, float X0, float Y0, float X1, float Y1, bool Repeatable = false)
+public readonly record struct MenuButton(MenuAction Action, float X0, float Y0, float X1, float Y1, bool Repeatable = false, int Slot = 0)
 {
     public bool Contains(float u, float v) => u >= X0 && u <= X1 && v >= Y0 && v <= Y1;
+}
+
+/// <summary>What the reticle points at on the panel.</summary>
+public readonly record struct MenuHit(MenuAction Action, float Fraction, bool Repeatable, int Slot)
+{
+    public static MenuHit None => new(MenuAction.None, 0f, false, 0);
 }
 
 /// <summary>
@@ -41,6 +49,20 @@ public static class VrMenuLayout
 
     private const float Row1Top = 0.41f, Row1Bottom = 0.65f, Row2Top = 0.71f, Row2Bottom = 0.95f;
 
+    /// <summary>Spot thumbnails shown per page of the "Marcas" menu.</summary>
+    public const int SpotsPerPage = 5;
+
+    private static IEnumerable<MenuButton> SpotSlots()
+    {
+        const float left = 0.03f, right = 0.97f, gap = 0.012f, top = 0.24f, bottom = 0.66f;
+        float w = (right - left - gap * (SpotsPerPage - 1)) / SpotsPerPage;
+        for (int i = 0; i < SpotsPerPage; i++)
+        {
+            float x0 = left + i * (w + gap);
+            yield return new MenuButton(MenuAction.SpotSlot, x0, top, x0 + w, bottom, Slot: i);
+        }
+    }
+
     private static readonly Dictionary<MenuPage, MenuButton[]> Pages = new()
     {
         [MenuPage.Main] = Row(Row1Top, Row1Bottom,
@@ -48,7 +70,7 @@ public static class VrMenuLayout
                 (MenuAction.Fwd10, true), (MenuAction.Next, false), (MenuAction.VolDown, true), (MenuAction.VolUp, true))
             .Concat(Row(Row2Top, Row2Bottom,
                 (MenuAction.Shuffle, false), (MenuAction.Repeat, false), (MenuAction.Format, false),
-                (MenuAction.Horizon, false), (MenuAction.Recenter, false), (MenuAction.Settings, false), (MenuAction.Exit, false)))
+                (MenuAction.Horizon, false), (MenuAction.Spots, false), (MenuAction.Settings, false), (MenuAction.Exit, false)))
             .Append(SeekBar).Append(CloseButton).ToArray(),
         [MenuPage.Horizon] = Row(Row1Top, Row1Bottom,
                 (MenuAction.PitchUp, true), (MenuAction.PitchDown, true), (MenuAction.RollLeft, true),
@@ -61,24 +83,31 @@ public static class VrMenuLayout
                 (MenuAction.ZoomOut, true), (MenuAction.ZoomIn, true), (MenuAction.IpdMinus, true),
                 (MenuAction.IpdPlus, true), (MenuAction.Lens, false), (MenuAction.Dwell, false))
             .Concat(Row(Row2Top, Row2Bottom,
-                (MenuAction.Format, false), (MenuAction.MenuSize, false), (MenuAction.Back, false)))
+                (MenuAction.Format, false), (MenuAction.MenuSize, false), (MenuAction.Opacity, false), (MenuAction.Back, false)))
+            .Append(CloseButton).ToArray(),
+        [MenuPage.Spots] = SpotSlots()
+            .Concat(Row(Row2Top, Row2Bottom,
+                (MenuAction.SpotPrev, false), (MenuAction.SpotAdd, false), (MenuAction.SpotNext, false),
+                (MenuAction.SpotPagePrev, false), (MenuAction.SpotPageNext, false), (MenuAction.SpotDeleteMode, false),
+                (MenuAction.Back, false)))
             .Append(CloseButton).ToArray(),
     };
 
     public static IReadOnlyList<MenuButton> Buttons(MenuPage page) => Pages[page];
 
     /// <summary>
-    /// Returns the action under (u, v) and, for the seek bar, the position fraction 0..1.
+    /// Returns the action under (u, v), the position fraction 0..1 for the seek bar and the slot
+    /// index for spot thumbnails.
     /// </summary>
-    public static (MenuAction Action, float Fraction, bool Repeatable) HitTest(MenuPage page, float u, float v)
+    public static MenuHit HitTest(MenuPage page, float u, float v)
     {
         foreach (var b in Pages[page])
         {
             if (!b.Contains(u, v)) continue;
             float fraction = b.Action == MenuAction.Seek ? Math.Clamp((u - b.X0) / (b.X1 - b.X0), 0f, 1f) : 0f;
-            return (b.Action, fraction, b.Repeatable);
+            return new MenuHit(b.Action, fraction, b.Repeatable, b.Slot);
         }
-        return (MenuAction.None, 0f, false);
+        return MenuHit.None;
     }
 
     private static IEnumerable<MenuButton> Row(float top, float bottom, params (MenuAction Action, bool Repeat)[] items)

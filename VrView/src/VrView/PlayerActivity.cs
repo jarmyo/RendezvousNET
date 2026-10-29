@@ -11,6 +11,7 @@ using VrView.Core;
 using VrView.Gl;
 using Uri = Android.Net.Uri;
 using Orientation = Android.Widget.Orientation;
+using RuntimeHelpers = System.Runtime.CompilerServices.RuntimeHelpers;
 
 namespace VrView;
 
@@ -40,6 +41,12 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private enum Source { Vr, Touch, Key }
 
     private AppSettings _settings = null!;
+    private VideoStore _store = null!;
+    private SpotThumbnails _thumbs = null!;
+    // Snapshot of _state.Spots for the menu model; replaced only when the spots change.
+    private long[] _spots = [];
+    private int _spotPage;
+    private bool _spotDeleteMode;
     private Playlist _playlist = null!;
     private HeadTracker _tracker = null!;
     private VrRenderer _renderer = null!;
@@ -64,6 +71,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private HorizontalScrollView _subRowScroll = null!;
     private TextView _titleText = null!, _timeText = null!, _durationText = null!;
     private SeekBar _seekBar = null!;
+    private SpotMarksView _spotMarks = null!;
+    private Button _spotsButton = null!;
+    private string _subRowKey = "";
     private Button _playButton = null!, _shuffleButton = null!, _repeatButton = null!, _formatButton = null!, _viewButton = null!,
         _sizeButton = null!;
     private MenuPage? _subPage;
@@ -97,12 +107,15 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         VolumeControlStream = Android.Media.Stream.Music;
 
         _settings = new AppSettings(this);
+        _store = new VideoStore(this, _settings);
+        _thumbs = new SpotThumbnails(this);
+        _thumbs.Changed += () => RunOnUiThread(RefreshUi);
         _audio = GetSystemService(AudioService) as AudioManager;
         _playlist = new Playlist(ReadItems(Intent, out int start), start, _settings.Shuffle, _settings.Repeat);
         if (_playlist.Count == 0) { Finish(); return; }
 
         _tracker = new HeadTracker(this);
-        _renderer = new VrRenderer(_tracker, this);
+        _renderer = new VrRenderer(_tracker, this) { ThumbnailSource = _thumbs.Get };
         PushConfig();
 
         _glView = new GLSurfaceView(this);
@@ -156,6 +169,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     {
         if (!_ready) { base.OnPause(); return; }
         SaveCurrentPosition();
+        VideoStore.Flush();
         _resumeOnStart = _prepared && _player?.IsPlaying == true;
         if (_prepared) _player?.Pause();
         _tracker.Stop();
@@ -240,8 +254,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         });
     }
 
-    public void OnMenuAction(MenuAction action, float fraction) =>
-        RunOnUiThread(() => HandleAction(action, fraction, Source.Vr));
+    public void OnMenuAction(MenuAction action, float fraction, int slot) =>
+        RunOnUiThread(() => HandleAction(action, fraction, Source.Vr, slot));
 
     public void OnHorizonCaptured(float pitch, float roll, float yaw) => RunOnUiThread(() =>
     {
@@ -274,10 +288,15 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
         _settings.LastVideoUri = item.Location;
         _settings.LastVideoName = item.Name;
-        _state = _settings.GetVideo(item.Location);
+        _state = _store.Get(item);
         _videoWidth = _videoHeight = 0;
         _detected = FormatDetector.Detect(item.Name);
-        _folderFormat = FormatDetector.HasTags(item.Name) ? null : _settings.GetFolderFormat(MediaUtil.FolderKey(item.Location));
+        _folderFormat = FormatDetector.HasTags(item.Name) ? null : _store.GetFolderFormat(item);
+        _spotPage = 0;
+        _spotDeleteMode = false;
+        SpotsChanged();
+        if (_store.IsReadOnlyFolder(item))
+            Toast.MakeText(this, "Para guardar vrview.json en la carpeta, vuelve a elegirla en la lista.", ToastLength.Long)!.Show();
         _prepared = false;
         PushConfig();
 
@@ -326,6 +345,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _videoWidth = width;
         _videoHeight = height;
         _detected = FormatDetector.Detect(Current?.Name ?? "", width, height);
+        SpotsChanged(); // the thumbnail crop depends on the format
         PushConfig();
         RefreshUi();
     }
@@ -335,7 +355,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         if (Current is { } item)
         {
             _state.PositionMs = 0;
-            _settings.SaveVideo(item.Location, _state);
+            _store.Save(item, _state);
         }
         int before = _playlist.CurrentIndex;
         if (!_playlist.AdvanceOnCompletion())
@@ -390,12 +410,12 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         if (_player is null || !_prepared || Current is not { } item) return;
         try { _state.PositionMs = _player.CurrentPosition; }
         catch (Java.Lang.IllegalStateException) { return; }
-        _settings.SaveVideo(item.Location, _state);
+        _store.Save(item, _state);
     }
 
     private void SaveVideoState()
     {
-        if (Current is { } item) _settings.SaveVideo(item.Location, _state);
+        if (Current is { } item) _store.Save(item, _state, flush: true);
     }
 
     private long Position => _prepared && _player is not null ? _player.CurrentPosition : 0;
@@ -422,7 +442,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     // ---- Actions ----
 
-    private void HandleAction(MenuAction action, float fraction, Source source)
+    private void HandleAction(MenuAction action, float fraction, Source source, int slot = 0)
     {
         _overlayShownAt = Java.Lang.JavaSystem.CurrentTimeMillis();
         switch (action)
@@ -479,6 +499,21 @@ public class PlayerActivity : Activity, VrRenderer.IHost
                 if (!_settings.StereoView)
                     Toast.MakeText(this, "Inclina el teléfono hasta alinear la línea con el horizonte y quédate quieto", ToastLength.Long)!.Show();
                 break;
+            case MenuAction.Spots:
+                if (source == Source.Touch) ShowSubRow(_subPage == MenuPage.Spots ? null : MenuPage.Spots);
+                else if (source == Source.Key) _glView.QueueEvent(() => _renderer.ShowMenu(MenuPage.Spots));
+                break;
+            case MenuAction.SpotAdd: AddSpot(); break;
+            case MenuAction.SpotPrev: JumpToSpot(SpotList.Previous(_state.Spots, Position), "No hay marcas antes"); break;
+            case MenuAction.SpotNext: JumpToSpot(SpotList.Next(_state.Spots, Position), "No hay marcas después"); break;
+            case MenuAction.SpotPagePrev: _spotPage = Math.Max(0, _spotPage - 1); break;
+            case MenuAction.SpotPageNext: _spotPage = Math.Min(BuildMenuModel().SpotPageCount - 1, _spotPage + 1); break;
+            case MenuAction.SpotDeleteMode: _spotDeleteMode = !_spotDeleteMode; break;
+            case MenuAction.SpotSlot: UseSpot(_spotPage * VrMenuLayout.SpotsPerPage + slot, source); break;
+            case MenuAction.Opacity:
+                _settings.ControlsOpacity = ControlSizes.NextOpacity(_settings.ControlsOpacity);
+                ApplyOverlaySize();
+                break;
             case MenuAction.MenuSize:
                 _settings.ControlsSize = (_settings.ControlsSize + 1) % ControlSizes.Count;
                 ApplyOverlaySize();
@@ -512,6 +547,60 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         SaveVideoState();
     }
 
+    // ---- Spots ("marcas") ----
+
+    private void AddSpot()
+    {
+        if (!_prepared) return;
+        long pos = Position;
+        if (!SpotList.Add(_state.Spots, pos))
+        {
+            Toast.MakeText(this, "Ya hay una marca aquí", ToastLength.Short)!.Show();
+            return;
+        }
+        SaveVideoState();
+        SpotsChanged();
+        // Show the page that contains the new spot.
+        _spotPage = Array.IndexOf(_spots, pos) / VrMenuLayout.SpotsPerPage;
+        Toast.MakeText(this, "Marca en " + MediaUtil.FormatTime(pos), ToastLength.Short)!.Show();
+    }
+
+    private void JumpToSpot(long? spot, string noneMessage)
+    {
+        if (spot is { } ms) SeekTo(ms);
+        else Toast.MakeText(this, _state.Spots.Count == 0 ? "Aún no hay marcas" : noneMessage, ToastLength.Short)!.Show();
+    }
+
+    /// <summary>A spot thumbnail was chosen: jump to it, or delete it in delete mode.</summary>
+    private void UseSpot(int index, Source source)
+    {
+        if (index < 0 || index >= _state.Spots.Count) return;
+        long ms = _state.Spots[index];
+        if (_spotDeleteMode)
+        {
+            _state.Spots.RemoveAt(index);
+            SaveVideoState();
+            SpotsChanged();
+            _spotPage = Math.Min(_spotPage, BuildMenuModel().SpotPageCount - 1);
+            if (_state.Spots.Count == 0) _spotDeleteMode = false;
+            Toast.MakeText(this, "Marca borrada (" + MediaUtil.FormatTime(ms) + ")", ToastLength.Short)!.Show();
+            return;
+        }
+        SeekTo(ms);
+        if (source == Source.Vr) _glView.QueueEvent(() => _renderer.HideMenu());
+    }
+
+    /// <summary>Refreshes the spot snapshot and asks for any missing thumbnails.</summary>
+    private void SpotsChanged()
+    {
+        _spots = _state.Spots.ToArray();
+        if (Current is { } item)
+        {
+            _thumbs.SetVideo(item.Location, CurrentFormat);
+            _thumbs.Request(_spots);
+        }
+    }
+
     /// <summary>Auto → each manual format in turn → back to auto.</summary>
     private void CycleFormat()
     {
@@ -533,10 +622,11 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         if (Current is { } item)
         {
             _folderFormat = _state.FormatOverride;
-            _settings.SetFolderFormat(MediaUtil.FolderKey(item.Location), _state.FormatOverride);
+            _store.SetFolderFormat(item, _state.FormatOverride);
         }
         string note = _state.FormatOverride is null ? " (auto)" : " · se usará en esta carpeta";
         Toast.MakeText(this, "Formato: " + CurrentFormat.Label + note, ToastLength.Short)!.Show();
+        SpotsChanged();
     }
 
     private static int IndexOfFormat(IReadOnlyList<VideoFormat> list, VideoFormat f)
@@ -561,7 +651,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _renderer.Config = new RenderConfig(CurrentFormat, _videoWidth, _videoHeight,
             _state.Pitch, _state.Roll, _state.Yaw, _settings.StereoView,
             _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
-            ControlSizes.MenuScale(_settings.ControlsSize));
+            ControlSizes.MenuScale(_settings.ControlsSize), _settings.ControlsOpacity);
     }
 
     private MenuModel BuildMenuModel()
@@ -577,7 +667,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             _playlist.Repeat, vol, CurrentFormat.Label, FormatNote, _state.Pitch, _state.Roll,
             _state.Yaw, _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
             Math.Max(0, _playlist.Order.ToList().IndexOf(_playlist.CurrentIndex)), _playlist.Count,
-            _settings.ControlsSize);
+            _settings.ControlsSize, _settings.ControlsOpacity, _spots, _spotPage, _spotDeleteMode, _thumbs.Version);
     }
 
     // ---- Periodic update ----
@@ -589,6 +679,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         // Display rotation can flip between landscape and reverse landscape without a config change.
         _tracker.DisplayRotation = CurrentDisplayRotation();
         if (_ticks % (5000 / TickMs) == 0 && IsPlaying) SaveCurrentPosition();
+        if (_ticks % (30_000 / TickMs) == 0) VideoStore.Flush();
         if (_overlay.Visibility == ViewStates.Visible && IsPlaying && _subPage is null && !_seekDragging &&
             Java.Lang.JavaSystem.CurrentTimeMillis() - _overlayShownAt > 5000)
             ShowOverlay(false);
@@ -623,6 +714,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _formatButton.Text = "Formato: " + model.FormatText;
         _viewButton.Text = _settings.StereoView ? "Vista: visor VR" : "Vista: pantalla";
         _sizeButton.Text = Labels.For(MenuAction.MenuSize, model);
+        _spotsButton.Text = Labels.For(MenuAction.Spots, model);
+        _spotMarks.SetSpots(model.Spots, model.DurationMs);
         if (_subPage is { } page) FillSubRow(page, model);
     }
 
@@ -649,6 +742,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         top.AddView(_formatButton);
         top.AddView(OverlayButton("Horizonte", (_, _) => HandleAction(MenuAction.Horizon, 0, Source.Touch)));
         top.AddView(OverlayButton("Recentrar", (_, _) => HandleAction(MenuAction.Recenter, 0, Source.Touch)));
+        _spotsButton = OverlayButton("", (_, _) => HandleAction(MenuAction.Spots, 0, Source.Touch));
+        top.AddView(_spotsButton);
         top.AddView(OverlayButton("Ajustes", (_, _) => HandleAction(MenuAction.Settings, 0, Source.Touch)));
         _sizeButton = OverlayButton("", (_, _) => HandleAction(MenuAction.MenuSize, 0, Source.Touch));
         top.AddView(_sizeButton);
@@ -684,7 +779,12 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             _overlayShownAt = Java.Lang.JavaSystem.CurrentTimeMillis();
         };
         seekRow.AddView(_timeText);
-        seekRow.AddView(_seekBar, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
+        // The spot ticks are drawn over the seek bar, using its padding to line up with the track.
+        var seekFrame = new FrameLayout(this);
+        seekFrame.AddView(_seekBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical));
+        _spotMarks = new SpotMarksView(this, _seekBar);
+        seekFrame.AddView(_spotMarks, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+        seekRow.AddView(seekFrame, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         seekRow.AddView(_durationText);
         _overlay.AddView(seekRow);
 
@@ -695,6 +795,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         controls.AddView(_playButton);
         controls.AddView(OverlayButton("10 ▶▶", (_, _) => HandleAction(MenuAction.Fwd10, 0, Source.Touch)));
         controls.AddView(OverlayButton("▶|", (_, _) => HandleAction(MenuAction.Next, 0, Source.Touch)));
+        controls.AddView(OverlayButton("◀ Marca", (_, _) => HandleAction(MenuAction.SpotPrev, 0, Source.Touch)));
+        controls.AddView(OverlayButton("＋ Marca", (_, _) => HandleAction(MenuAction.SpotAdd, 0, Source.Touch)));
+        controls.AddView(OverlayButton("Marca ▶", (_, _) => HandleAction(MenuAction.SpotNext, 0, Source.Touch)));
         _shuffleButton = OverlayButton("", (_, _) => HandleAction(MenuAction.Shuffle, 0, Source.Touch));
         controls.AddView(_shuffleButton);
         _repeatButton = OverlayButton("", (_, _) => HandleAction(MenuAction.Repeat, 0, Source.Touch));
@@ -721,6 +824,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private void ApplyOverlaySize()
     {
         if (_overlay is null) return;
+        _overlay.Alpha = _settings.ControlsOpacity;
         int size = _settings.ControlsSize;
         float textSp = size switch { 0 => 11f, 1 => 13f, _ => 15f };
         _titleText.SetTextSize(Android.Util.ComplexUnitType.Sp, textSp);
@@ -787,12 +891,14 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void FillSubRow(MenuPage page, MenuModel model)
     {
+        if (page == MenuPage.Spots) { FillSpotsRow(model); return; }
         var actions = VrMenuLayout.Buttons(page)
             .Select(b => b.Action)
-            .Where(a => a is not (MenuAction.Seek or MenuAction.Recenter or MenuAction.Format))
+            .Where(a => a is not (MenuAction.Seek or MenuAction.Recenter or MenuAction.Format or MenuAction.Hide))
             .ToList();
-        if (_subRow.ChildCount != actions.Count + 1 || _subRow.Tag?.ToString() != page.ToString())
+        if (_subRowKey != page.ToString())
         {
+            _subRowKey = page.ToString();
             _subRow.RemoveAllViews();
             _subRow.Tag = page.ToString();
             var header = new TextView(this);
@@ -805,6 +911,48 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         ((TextView)_subRow.GetChildAt(0)!).Text = Labels.Header(page, model).Split(" · ", 2) is { Length: 2 } parts ? parts[1] : "";
         for (int i = 0; i < actions.Count; i++)
             ((Button)_subRow.GetChildAt(i + 1)!).Text = actions[i] == MenuAction.Back ? "Cerrar" : Labels.For(actions[i], model);
+    }
+
+    /// <summary>
+    /// Touch version of the "Marcas" page: add / previous / next / delete mode, then every spot as a
+    /// thumbnail (tap to jump, or to delete in delete mode).
+    /// </summary>
+    private void FillSpotsRow(MenuModel model)
+    {
+        string key = $"spots:{RuntimeHelpers.GetHashCode(model.Spots)}:{model.ThumbsVersion}:{model.SpotDeleteMode}:{_settings.ControlsSize}";
+        if (key == _subRowKey) return;
+        _subRowKey = key;
+        _subRow.RemoveAllViews();
+        _subRow.Tag = null;
+        foreach (var a in new[] { MenuAction.SpotAdd, MenuAction.SpotDeleteMode })
+            _subRow.AddView(OverlayButton(Labels.For(a, model), (_, _) => HandleAction(a, 0, Source.Touch)));
+        if (model.Spots.Length == 0)
+        {
+            var hint = new TextView(this) { Text = "Aún no hay marcas: «＋ Marca» guarda el momento actual." };
+            hint.SetTextColor(Color.Rgb(176, 190, 197));
+            hint.SetPadding(Dp(8), 0, Dp(8), 0);
+            _subRow.AddView(hint);
+        }
+
+        int thumbHeight = Dp(_settings.ControlsSize switch { 0 => 44, 1 => 56, _ => 72 });
+        for (int i = 0; i < model.Spots.Length; i++)
+        {
+            int index = i;
+            long ms = model.Spots[i];
+            var cell = new LinearLayout(this) { Orientation = Orientation.Vertical, Clickable = true };
+            cell.SetPadding(Dp(3), Dp(2), Dp(3), Dp(2));
+            cell.SetBackgroundColor(model.SpotDeleteMode ? Color.Argb(120, 229, 57, 53) : Color.Transparent);
+            var image = new ImageView(this);
+            image.SetScaleType(ImageView.ScaleType.CenterCrop!);
+            image.SetBackgroundColor(Color.Rgb(30, 38, 46));
+            if (_thumbs.Get(ms) is { } bmp) image.SetImageBitmap(bmp);
+            cell.AddView(image, new LinearLayout.LayoutParams(thumbHeight * 16 / 9, thumbHeight));
+            var label = new TextView(this) { Text = (model.SpotDeleteMode ? "✕ " : "") + MediaUtil.FormatTime(ms), Gravity = GravityFlags.Center };
+            label.SetTextColor(Color.White);
+            cell.AddView(label);
+            cell.Click += (_, _) => UseSpot(index, Source.Touch);
+            _subRow.AddView(cell);
+        }
     }
 
     // ---- Touch on the video ----
@@ -996,10 +1144,16 @@ public class PlayerActivity : Activity, VrRenderer.IHost
                 HandleAction(Act(MenuAction.Next, MenuAction.YawRight), 0, Source.Key);
                 return true;
             case Keycode.ButtonL2:
-                SeekTo(Position - 60_000);
+                if (_state.Spots.Count > 0) HandleAction(MenuAction.SpotPrev, 0, Source.Key);
+                else SeekTo(Position - 60_000);
                 return true;
             case Keycode.ButtonR2:
-                SeekTo(Position + 60_000);
+                if (_state.Spots.Count > 0) HandleAction(MenuAction.SpotNext, 0, Source.Key);
+                else SeekTo(Position + 60_000);
+                return true;
+            case Keycode.ButtonThumbl:
+            case Keycode.K:
+                HandleAction(MenuAction.SpotAdd, 0, Source.Key);
                 return true;
             case Keycode.ButtonSelect:
             case Keycode.F:

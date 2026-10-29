@@ -29,6 +29,18 @@ public static class MediaUtil
     }
 
     /// <summary>
+    /// The picked folder (SAF tree URI) a document URI was built from, or null when the location
+    /// is not inside a picked folder (e.g. a video opened from another app).
+    /// </summary>
+    public static string? TreeOf(string location)
+    {
+        int doc = location.IndexOf("/document/", StringComparison.Ordinal);
+        return doc > 0 && location.IndexOf("/tree/", StringComparison.Ordinal) is var tree && tree >= 0 && tree < doc
+            ? location[..doc]
+            : null;
+    }
+
+    /// <summary>
     /// Identifies the folder a video lives in, from its location (a SAF document URI such as
     /// <c>content://…/tree/primary%3AMovies/document/primary%3AMovies%2FVR%2Fclip.mp4</c>, or a plain path/URI).
     /// Providers with opaque document ids fall back to the picked tree, so all its videos share one key.

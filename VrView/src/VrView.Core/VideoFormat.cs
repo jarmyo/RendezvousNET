@@ -75,6 +75,31 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
         }
     }
 
+    /// <summary>
+    /// Part of a decoded frame (fractions, origin top-left) that makes a good flat thumbnail:
+    /// one eye only, and for 180/360/fisheye the region straight ahead instead of the distorted edges.
+    /// </summary>
+    public (float X0, float Y0, float X1, float Y1) ThumbnailCrop()
+    {
+        // One eye, in image coordinates (top-left origin).
+        bool first = !SwapEyes;
+        var (x0, y0, x1, y1) = Stereo switch
+        {
+            StereoMode.SideBySide => first ? (0f, 0f, 0.5f, 1f) : (0.5f, 0f, 1f, 1f),
+            StereoMode.TopBottom => first ? (0f, 0f, 1f, 0.5f) : (0f, 0.5f, 1f, 1f),
+            _ => (0f, 0f, 1f, 1f),
+        };
+        // Centered window of that eye.
+        var (fw, fh) = Projection switch
+        {
+            Projection.Sphere360 => (0.3f, 0.6f),
+            Projection.Dome180 or Projection.Fisheye => (0.6f, 0.6f),
+            _ => (1f, 1f),
+        };
+        float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h / 2;
+        return (cx - w * fw / 2, cy - h * fh / 2, cx + w * fw / 2, cy + h * fh / 2);
+    }
+
     /// <summary>Short user-facing (Spanish) label, e.g. "180° SBS".</summary>
     public string Label
     {

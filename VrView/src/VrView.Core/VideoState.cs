@@ -15,7 +15,13 @@ public sealed class VideoState
     public float Roll { get; set; }
     public float Yaw { get; set; }
 
+    /// <summary>Bookmarked positions ("marcas") in milliseconds, sorted.</summary>
+    public List<long> Spots { get; set; } = [];
+
     public bool HasHorizon => Pitch != 0 || Roll != 0 || Yaw != 0;
+
+    /// <summary>True when nothing differs from a never-played video (it need not be stored).</summary>
+    public bool IsEmpty => PositionMs == 0 && FormatOverride is null && !HasHorizon && Spots.Count == 0;
 
     public string Serialize()
     {
@@ -28,6 +34,7 @@ public sealed class VideoState
             "yaw=" + Yaw.ToString("0.##", ci),
         };
         if (FormatOverride is { } f) parts.Add("fmt=" + f.Serialize());
+        if (Spots.Count > 0) parts.Add("spots=" + string.Join(',', Spots.Select(x => x.ToString(ci))));
         return string.Join(';', parts);
     }
 
@@ -48,6 +55,7 @@ public sealed class VideoState
                 case "roll" when float.TryParse(value, NumberStyles.Float, ci, out var v): s.Roll = v; break;
                 case "yaw" when float.TryParse(value, NumberStyles.Float, ci, out var v): s.Yaw = v; break;
                 case "fmt": s.FormatOverride = VideoFormat.TryParse(value); break;
+                case "spots": s.Spots = SpotList.Parse(value.Split(',')); break;
             }
         }
         return s;

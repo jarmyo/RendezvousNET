@@ -18,9 +18,10 @@ internal sealed record RenderConfig(
     float IpdShift,
     int LensLevel,
     bool GazeClick,
-    float MenuScale)
+    float MenuScale,
+    float MenuOpacity)
 {
-    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true, ControlSizes.MenuScale(1));
+    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true, ControlSizes.MenuScale(1), 0.9f);
 
     /// <summary>Lens pre-distortion coefficients (k1, k2) for each "Lente" level.</summary>
     public (float K1, float K2) LensCoefficients => LensLevel switch
@@ -52,9 +53,18 @@ internal sealed record MenuModel(
     bool GazeClick,
     int Index,
     int Count,
-    int ControlsSize)
+    int ControlsSize,
+    float Opacity,
+    // Same array instance until the spots change, so record equality stays cheap.
+    long[] Spots,
+    int SpotPage,
+    bool SpotDeleteMode,
+    int ThumbsVersion)
 {
-    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1);
+    public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1,
+        0.9f, [], 0, false, 0);
+
+    public int SpotPageCount => Math.Max(1, (Spots.Length + VrMenuLayout.SpotsPerPage - 1) / VrMenuLayout.SpotsPerPage);
 
     public string FormatText => FormatNote.Length > 0 ? $"{FormatLabel} ({FormatNote})" : FormatLabel;
 }
@@ -68,6 +78,15 @@ internal static class ControlSizes
     public static float MenuScale(int size) => size switch { 0 => 0.6f, 1 => 0.8f, _ => 1f };
 
     public static string Label(int size) => size switch { 0 => "chicos", 1 => "medianos", _ => "grandes" };
+
+    private static readonly float[] Opacities = [1f, 0.8f, 0.6f, 0.4f];
+
+    /// <summary>Next value of the "Opacidad" cycle: 100 → 80 → 60 → 40 → 100 %.</summary>
+    public static float NextOpacity(float current)
+    {
+        int i = Array.FindIndex(Opacities, o => MathF.Abs(o - current) < 0.05f);
+        return Opacities[(i + 1) % Opacities.Length];
+    }
 }
 
 /// <summary>Spanish labels shared by the VR panel and the touch overlay.</summary>
@@ -106,12 +125,24 @@ internal static class Labels
         MenuAction.SetHorizon => "Fijar con la cabeza",
         MenuAction.MenuSize => "Controles: " + ControlSizes.Label(m.ControlsSize),
         MenuAction.Hide => "✕",
+        MenuAction.Spots => m.Spots.Length > 0 ? $"Marcas ({m.Spots.Length})" : "Marcas",
+        MenuAction.SpotAdd => "＋ Marca",
+        MenuAction.SpotPrev => "◀ Marca",
+        MenuAction.SpotNext => "Marca ▶",
+        MenuAction.SpotPagePrev => "◀ Pág.",
+        MenuAction.SpotPageNext => "Pág. ▶",
+        MenuAction.SpotDeleteMode => m.SpotDeleteMode ? "Borrar: sí" : "Borrar: no",
+        MenuAction.Opacity => $"Opacidad: {m.Opacity * 100:0}%",
         _ => "",
     };
 
     public static string Header(MenuPage page, MenuModel m) => page switch
     {
         MenuPage.Horizon => $"Horizonte · inclinación {m.Pitch:+0.0;-0.0;0}° · nivel {m.Roll:+0.0;-0.0;0}° · giro {m.Yaw:+0;-0;0}°",
+        MenuPage.Spots => m.Spots.Length == 0
+            ? "Marcas · aún no hay: pulsa «＋ Marca» para guardar el momento actual"
+            : $"Marcas · {m.Spots.Length} · página {m.SpotPage + 1}/{m.SpotPageCount}" +
+              (m.SpotDeleteMode ? " · mira una marca para BORRARLA" : " · mira una marca para saltar a ella"),
         MenuPage.Settings => $"Ajustes · campo de visión {m.Fov:0}° · separación lentes {m.IpdShift * 100:+0;-0;0}",
         _ => $"{MediaUtil.FormatTime(m.PositionMs)} / {MediaUtil.FormatTime(m.DurationMs)}   ·   {m.FormatText}   ·   Vol {m.VolumePercent}%   ·   {m.Index + 1}/{m.Count}",
     };

@@ -22,7 +22,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         /// <summary>Called on the GL thread when the decoder target is (re)created.</summary>
         void OnVideoSurfaceCreated(SurfaceTexture surfaceTexture);
         /// <summary>Called on the GL thread when the user clicks a menu button by gaze or trigger.</summary>
-        void OnMenuAction(MenuAction action, float fraction);
+        /// <param name="slot">For spot thumbnails, which one on the current page.</param>
+        void OnMenuAction(MenuAction action, float fraction, int slot);
         /// <summary>Called on the GL thread when "set horizon with the head" captured a new correction (degrees).</summary>
         void OnHorizonCaptured(float pitch, float roll, float yaw);
         /// <summary>Called on the GL thread when the capture was cancelled or timed out.</summary>
@@ -55,6 +56,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     public volatile MenuPage Page;
     /// <summary>Published "set horizon with the head" state for the UI thread.</summary>
     public volatile bool Capturing;
+    /// <summary>Spot thumbnails for the "Marcas" page (set by the UI thread per video).</summary>
+    public volatile Func<long, Android.Graphics.Bitmap?>? ThumbnailSource;
 
     private volatile bool _recenterRequested;
     private volatile bool _frameAvailable;
@@ -88,6 +91,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private MenuModel? _paintedModel;
     private MenuPage _paintedPage;
     private MenuAction _paintedHover;
+    private int _hoveredSlot, _paintedSlot;
     private bool _panelDirty = true;
 
     // "Set horizon with the head" (GL thread only)
@@ -156,9 +160,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         if (!_menuVisible) { ShowMenu(MenuPage.Main); return; }
         var f = VrMath.Forward(CurrentView());
         var hit = HitPanel(f, Config);
-        var (action, fraction, _) = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : (MenuAction.None, 0f, false);
-        if (action == MenuAction.None) HideMenu();
-        else Fire(action, fraction);
+        var target = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : MenuHit.None;
+        if (target.Action == MenuAction.None) HideMenu();
+        else Fire(target);
     }
 
     private void SetMenu(bool visible, MenuPage page)
@@ -173,11 +177,12 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         _panelDirty = true;
     }
 
-    private void Fire(MenuAction action, float fraction)
+    private void Fire(MenuHit target)
     {
-        switch (action)
+        switch (target.Action)
         {
             case MenuAction.Horizon: SetMenu(true, MenuPage.Horizon); break;
+            case MenuAction.Spots: SetMenu(true, MenuPage.Spots); break;
             case MenuAction.Settings: SetMenu(true, MenuPage.Settings); break;
             case MenuAction.Back: SetMenu(true, MenuPage.Main); break;
             case MenuAction.Exit:
@@ -185,7 +190,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             case MenuAction.SetHorizon: StartHorizonCapture(); break;
         }
         _idleSeconds = 0;
-        _host.OnMenuAction(action, fraction);
+        _host.OnMenuAction(target.Action, target.Fraction, target.Slot);
     }
 
     // ---- GLSurfaceView.IRenderer ----
@@ -399,8 +404,13 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         }
 
         var hit = HitPanel(forward, cfg);
-        var (action, fraction, repeat) = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : (MenuAction.None, 0f, false);
-        if (action != _hovered) { _hovered = action; _panelDirty = true; }
+        var target = hit is { } h ? VrMenuLayout.HitTest(_page, h.X, h.Y) : MenuHit.None;
+        if (target.Action != _hovered || target.Slot != _hoveredSlot)
+        {
+            _hovered = target.Action;
+            _hoveredSlot = target.Slot;
+            _panelDirty = true;
+        }
 
         bool onPanel = hit is { } p && p.X >= 0 && p.X <= 1 && p.Y >= 0 && p.Y <= 1;
         _idleSeconds = onPanel ? 0 : _idleSeconds + dt;
@@ -411,9 +421,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         }
 
         _dwell.DwellSeconds = 1.4f;
-        int key = action == MenuAction.Seek ? (int)(fraction * 40) : 0;
-        if (cfg.GazeClick && _dwell.Update(action, key, repeat, dt))
-            Fire(action, fraction);
+        int key = target.Action == MenuAction.Seek ? (int)(target.Fraction * 40) : target.Slot;
+        if (cfg.GazeClick && _dwell.Update(target.Action, key, target.Repeatable, dt))
+            Fire(target);
     }
 
     private void EnsureVideoMesh(RenderConfig cfg)
@@ -451,8 +461,10 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private void PaintPanelIfNeeded()
     {
         var m = Menu;
-        if (!_panelDirty && Equals(m, _paintedModel) && _paintedPage == _page && _paintedHover == _hovered) return;
-        _painter!.Draw(_page, m, _hovered);
+        if (!_panelDirty && Equals(m, _paintedModel) && _paintedPage == _page && _paintedHover == _hovered &&
+            _paintedSlot == _hoveredSlot) return;
+        _painter!.Draw(_page, m, _hovered, _hoveredSlot, ThumbnailSource);
+        _paintedSlot = _hoveredSlot;
         GLES20.GlBindTexture(GLES20.GlTexture2d, _panelTexture);
         GLUtils.TexImage2D(GLES20.GlTexture2d, 0, _painter.Bitmap, 0);
         _paintedModel = m;
@@ -468,7 +480,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         GLES20.GlUseProgram(_texProgram);
         VrMath.ToGl(mvp, _mvp);
         GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_texProgram, "uMvp"), 1, false, _mvp, 0);
-        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_texProgram, "uAlpha"), 1f);
+        GLES20.GlUniform1f(GLES20.GlGetUniformLocation(_texProgram, "uAlpha"), Config.MenuOpacity);
         GLES20.GlActiveTexture(GLES20.GlTexture0);
         GLES20.GlBindTexture(GLES20.GlTexture2d, _panelTexture);
         GLES20.GlUniform1i(GLES20.GlGetUniformLocation(_texProgram, "uTexture"), 0);

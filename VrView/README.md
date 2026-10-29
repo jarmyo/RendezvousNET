@@ -17,11 +17,12 @@ Android y OpenGL ES 2.0. No usa Unity, MAUI ni librerías externas: solo el SDK 
 |---|---|
 | Lista por carpeta | Eliges una carpeta con el selector del sistema (no hace falta ningún permiso de almacenamiento) y se listan sus vídeos en orden natural (`clip2` va antes que `clip10`). Puedes incluir subcarpetas. Al terminar un vídeo empieza el siguiente. |
 | Aleatorio y repetición | Aleatorio sí/no. Repetir: no / todo / uno. «Anterior» vuelve por el orden real de reproducción, también en aleatorio. Al volver a empezar la lista aleatoria se baraja de nuevo, sin repetir seguido el último vídeo. |
-| Recordar | Recuerda la última carpeta, el último vídeo («Continuar») y la posición de cada vídeo. También guarda por vídeo el formato elegido a mano y la corrección del horizonte. |
+| Recordar | Recuerda la última carpeta, el último vídeo («Continuar») y la posición de cada vídeo. También guarda por vídeo el formato elegido a mano, la corrección del horizonte y las marcas. Todo eso se guarda en **`vrview.json` dentro de la carpeta** (ver abajo), así que sobrevive a reinstalar la app. |
+| Marcas | Guarda momentos del vídeo (**＋ Marca**) y salta entre ellos (**◀ Marca / Marca ▶**). Se ven como rayitas amarillas en la barra de progreso y, en la página **Marcas**, como miniaturas: mira una para saltar a ella, o activa **Borrar: sí** para quitarla. |
 | Formatos | Plano 2D, 180°, 360° y ojo de pez (190° por defecto, o el valor de la etiqueta). Mono, lado a lado (SBS/LR), arriba-abajo (TB/OU), y ojos invertidos (RL/BT). |
 | Detección automática | Por etiquetas en el nombre del archivo y, si faltan, por las proporciones del vídeo. Se puede cambiar a mano (botón **Formato**: auto → cada formato → auto). |
 | Formato por carpeta | El formato que eliges a mano se guarda para ese vídeo **y para su carpeta**: los demás vídeos de la carpeta sin etiquetas en el nombre lo usan automáticamente (se indica «(carpeta)»). Las etiquetas del nombre siempre mandan. Volver a «auto» lo olvida. |
-| Tamaño de los controles | **Controles: chicos / medianos / grandes** (en Ajustes o en los controles táctiles) cambia el tamaño del menú VR y de los botones táctiles. El menú VR tiene un **✕** para cerrarlo y los controles táctiles un botón **✕ Ocultar**. |
+| Tamaño y opacidad de los controles | **Controles: chicos / medianos / grandes** y **Opacidad: 100 / 80 / 60 / 40 %** (en Ajustes) cambian el menú VR y los botones táctiles. El menú VR tiene un **✕** para cerrarlo y los controles táctiles un botón **✕ Ocultar**. |
 | Visor VR | Pantalla partida para los dos ojos, con seguimiento de la cabeza por el sensor de rotación (giroscopio). Zoom (campo de visión), separación de lentes (IPD) y corrección de la distorsión de las lentes (no / suave / fuerte). |
 | Horizonte | **Fijar con la cabeza** (inclinas la cabeza hasta ver el horizonte derecho, te quedas quieto y se fija), **Recentrar** (pone el centro del vídeo donde miras) y corrección manual de inclinación, nivel (alabeo) y giro. Se guarda para cada vídeo. |
 | Sin visor | Vista «pantalla» (una sola imagen): arrastra con el dedo para mirar alrededor y pellizca para hacer zoom. |
@@ -61,7 +62,11 @@ el resto como plano.
 - El menú se oculta solo si dejas de mirarlo unos segundos.
 
 Menú principal: anterior, −10 s, reproducir/pausa, +10 s, siguiente, volumen −/+, aleatorio,
-repetir, formato, horizonte, recentrar, ajustes, salir, y **✕** (arriba a la derecha) para cerrarlo.
+repetir, formato, horizonte, marcas, ajustes, salir, y **✕** (arriba a la derecha) para cerrarlo.
+(**Recentrar** está en la página Horizonte, en el botón Y del mando y en los controles táctiles.)
+
+Página **Marcas**: miniaturas de las marcas (5 por página), ◀ Marca, ＋ Marca, Marca ▶, páginas y
+«Borrar: sí/no».
 
 ### Mando Bluetooth, teclado, mandos de visor y botones multimedia
 
@@ -72,7 +77,8 @@ repetir, formato, horizonte, recentrar, ajustes, salir, y **✕** (arriba a la d
 | ← / → (cruceta) · Rebobinar / Avanzar | −10 s / +10 s |
 | ↑ / ↓ (cruceta) | volumen + / − |
 | L1 / R1 · Anterior / Siguiente · RePág / AvPág | vídeo anterior / siguiente |
-| L2 / R2 | −60 s / +60 s |
+| L2 / R2 | marca anterior / siguiente (sin marcas: −60 s / +60 s) |
+| L3 (pulsar el stick) / `K` | añadir marca |
 | X / Start / Menú / `M` | abrir o cerrar el menú VR |
 | B / Esc / Atrás | volver o cerrar el menú (Atrás sin menú: volver a la lista) |
 | Y / `R` | recentrar |
@@ -94,6 +100,32 @@ multimedia.
   tamaño de controles, ocultar, barra de progreso, anterior, ±10 s, reproducir/pausa, siguiente,
   aleatorio, repetir y volumen.
 - En vista «pantalla»: arrastra para mirar alrededor y pellizca para hacer zoom.
+
+### Ajustes en la carpeta: `vrview.json`
+
+Al elegir una carpeta, VrView crea en ella un archivo `vrview.json` con lo que recuerda de sus
+vídeos: posición, formato elegido a mano, horizonte y marcas, y el formato de cada subcarpeta.
+Como vive junto a los vídeos, no se pierde al reinstalar la app, viaja con la carpeta si la copias
+a otro teléfono y puedes editarlo a mano:
+
+```json
+{
+  "version": 1,
+  "folders": { "": "Dome180,SideBySide,0,190" },
+  "videos": {
+    "paseo_180_LR.mp4": { "position": 61000, "roll": -3.5, "spots": [ 12000, 95000 ] },
+    "Conciertos/show.mp4": { "format": "Sphere360,TopBottom,0,190" }
+  }
+}
+```
+
+Tiempos en milisegundos y ángulos en grados. Los vídeos se identifican por su ruta dentro de la
+carpeta elegida. Los ajustes generales (zoom, lentes, tamaño y opacidad de controles…) siguen en la
+app.
+
+Si elegiste la carpeta con una versión anterior de VrView (que pedía solo lectura), **vuelve a
+elegirla** para darle permiso de escritura; mientras tanto los ajustes se guardan en la app como
+antes.
 
 ### Ajustar el horizonte
 

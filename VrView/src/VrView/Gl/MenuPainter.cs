@@ -14,7 +14,7 @@ internal sealed class MenuPainter : IDisposable
 
     public Bitmap Bitmap { get; } = Bitmap.CreateBitmap(Width, Height, Bitmap.Config.Argb8888!)!;
 
-    public void Draw(MenuPage page, MenuModel m, MenuAction hovered)
+    public void Draw(MenuPage page, MenuModel m, MenuAction hovered, int hoveredSlot, Func<long, Bitmap?>? thumbnails)
     {
         var c = new Canvas(Bitmap);
         c.DrawColor(Color.Transparent, PorterDuff.Mode.Clear!);
@@ -41,6 +41,11 @@ internal sealed class MenuPainter : IDisposable
         foreach (var b in VrMenuLayout.Buttons(page))
         {
             if (b.Action == MenuAction.Seek) continue;
+            if (b.Action == MenuAction.SpotSlot)
+            {
+                DrawSpot(c, b, m, hovered == MenuAction.SpotSlot && hoveredSlot == b.Slot, thumbnails);
+                continue;
+            }
             var r = new RectF(b.X0 * Width, b.Y0 * Height, b.X1 * Width, b.Y1 * Height);
             bool active = b.Action switch
             {
@@ -48,6 +53,7 @@ internal sealed class MenuPainter : IDisposable
                 MenuAction.Repeat => m.Repeat != RepeatMode.Off,
                 MenuAction.Lens => m.LensLevel > 0,
                 MenuAction.Dwell => m.GazeClick,
+                MenuAction.SpotDeleteMode => m.SpotDeleteMode,
                 _ => false,
             };
             _fill.Color = b.Action == hovered ? Color.Argb(255, 79, 195, 247)
@@ -92,8 +98,50 @@ internal sealed class MenuPainter : IDisposable
         float f = m.DurationMs > 0 ? Math.Clamp((float)m.PositionMs / m.DurationMs, 0, 1) : 0;
         _fill.Color = Color.Argb(255, 79, 195, 247);
         c.DrawRoundRect(new RectF(x0, cy - h, x0 + (x1 - x0) * f, cy + h), h, h, _fill);
+        // Spots as small yellow ticks on the bar.
+        if (m.DurationMs > 0)
+        {
+            _fill.Color = Color.Argb(255, 255, 202, 40);
+            foreach (long s in m.Spots)
+            {
+                float sx = x0 + (x1 - x0) * Math.Clamp((float)s / m.DurationMs, 0, 1);
+                c.DrawRoundRect(new RectF(sx - 4, cy - h - 12, sx + 4, cy + h + 12), 4, 4, _fill);
+            }
+        }
         _fill.Color = Color.White;
         c.DrawCircle(x0 + (x1 - x0) * f, cy, h + 8, _fill);
+    }
+
+    private void DrawSpot(Canvas c, MenuButton b, MenuModel m, bool hovered, Func<long, Bitmap?>? thumbnails)
+    {
+        int index = m.SpotPage * VrMenuLayout.SpotsPerPage + b.Slot;
+        if (index >= m.Spots.Length) return;
+        long ms = m.Spots[index];
+        var cell = new RectF(b.X0 * Width, b.Y0 * Height, b.X1 * Width, b.Y1 * Height);
+        _fill.Color = hovered ? (m.SpotDeleteMode ? Color.Argb(255, 229, 57, 53) : Color.Argb(255, 79, 195, 247)) : Color.Argb(255, 44, 55, 66);
+        c.DrawRoundRect(cell, 18, 18, _fill);
+
+        float labelH = cell.Height() * 0.2f;
+        var image = new RectF(cell.Left + 8, cell.Top + 8, cell.Right - 8, cell.Bottom - labelH - 4);
+        if (thumbnails?.Invoke(ms) is { IsRecycled: false } bmp)
+        {
+            // Center-crop the thumbnail into the cell.
+            float scale = Math.Max(image.Width() / bmp.Width, image.Height() / bmp.Height);
+            float sw = image.Width() / scale, sh = image.Height() / scale;
+            var src = new Rect((int)((bmp.Width - sw) / 2), (int)((bmp.Height - sh) / 2),
+                (int)((bmp.Width + sw) / 2), (int)((bmp.Height + sh) / 2));
+            c.DrawBitmap(bmp, src, image, null);
+        }
+        else
+        {
+            _fill.Color = Color.Argb(255, 30, 38, 46);
+            c.DrawRect(image, _fill);
+        }
+
+        _text.Color = hovered ? Color.Black : Color.White;
+        _text.TextSize = labelH * 0.75f;
+        string label = (m.SpotDeleteMode ? "✕ " : "") + MediaUtil.FormatTime(ms);
+        DrawFitted(c, label, new RectF(cell.Left, cell.Bottom - labelH - 4, cell.Right, cell.Bottom - 4));
     }
 
     private void DrawFitted(Canvas c, string text, RectF r)
