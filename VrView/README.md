@@ -24,6 +24,8 @@ Android y OpenGL ES 2.0. No usa Unity, MAUI ni librerías externas: solo el SDK 
 | Formato por carpeta | El formato que eliges a mano se guarda para ese vídeo **y para su carpeta**: los demás vídeos de la carpeta sin etiquetas en el nombre lo usan automáticamente (se indica «(carpeta)»). Las etiquetas del nombre siempre mandan. Volver a «auto» lo olvida. |
 | Ajuste fino del formato | Para cámaras que no siguen el estándar exacto: **campo horizontal y vertical** de vídeos 180°/360° (p. ej. 200°×180° o 180°×120°), y en ojo de pez **ángulo, tipo de lente** (equidistante / equisólida / estereográfica), **posición** y **tamaño del círculo**. Se guarda con el formato del vídeo y de su carpeta. |
 | Tapa abajo (nadir) | Disco negro difuminado bajo tus pies (20°–50°) para tapar la zona «pellizcada» donde estaba el trípode o la mano. |
+| Botones laterales ◀ ▶ | Botones de video anterior / siguiente siempre visibles a los lados del frente (30°, 40° o 50°, o apagados, en Ajustes). Se pulsan mirándolos 2 s o mirándolos y tocando la pantalla. |
+| Calidad | **Calidad: alta** (por defecto) suaviza los vídeos de alta resolución (4 muestras por píxel) y los bordes (antialiasing 4×). «Normal» gasta menos batería. |
 | Tamaño y opacidad de los controles | **Controles: chicos / medianos / grandes** y **Opacidad: 100 / 80 / 60 / 40 %** (en Ajustes) cambian el menú VR y los botones táctiles. El menú VR tiene un **✕** para cerrarlo y los controles táctiles un botón **✕ Ocultar**. |
 | Visor VR | Pantalla partida para los dos ojos, con seguimiento de la cabeza por el sensor de rotación (giroscopio). Zoom (campo de visión), separación de lentes (IPD) y corrección de la distorsión de las lentes (no / suave / fuerte). |
 | Horizonte | **Fijar con la cabeza** (inclinas la cabeza hasta ver el horizonte derecho, te quedas quieto y se fija), **Recentrar** (pone el centro del vídeo donde miras) y corrección manual de inclinación, nivel (alabeo) y giro. Se guarda para cada vídeo. |
@@ -142,9 +144,10 @@ actual aparecen apagados.
   imagen cuando la cámara no lo graba exactamente en el centro, y cambia la curva del lente.
 - **Tapa abajo**: no / 20° / 30° / 40° / 50°.
 - **Restablecer** vuelve al formato estándar.
+- **Usar en carpeta / Carpeta: quitar**: el ajuste fino es **solo de este vídeo**; este botón lo
+  comparte con los vídeos sin etiqueta de su carpeta (o deja de compartirlo).
 
-Los valores se guardan en el formato del vídeo (y como formato de su carpeta), así que también van
-en `vrview.json`, p. ej. `"Fisheye,SideBySide,0,200,lens=Equisolid,cx=0.01,r=1.03,nadir=30"`.
+Los valores se guardan en el formato del vídeo, así que también van en `vrview.json`, p. ej. `"Fisheye,SideBySide,0,200,lens=Equisolid,cx=0.01,r=1.03,nadir=30"`.
 Cambiar de formato con el botón **Formato** quita el ajuste fino.
 
 ### Ajustar el horizonte
@@ -161,8 +164,14 @@ Abre **Horizonte** (en el menú VR, en los controles táctiles o con `H`):
 - **Girar ←/→** cambia qué parte del vídeo queda delante.
 - **Restablecer** quita la corrección. Los valores se guardan para cada vídeo.
 
-**Recentrar** no se guarda: pone el frente del vídeo donde estás mirando ahora. Se hace solo al
-abrir el reproductor.
+**Recentrar** no se guarda: pone el frente del vídeo donde estás mirando ahora, también arriba/abajo
+(útil acostado). Al abrir el reproductor se recentra solo de lado a lado.
+
+### Alinear el menú
+
+Si el vídeo se ve bien pero el menú se ve doble o separado, ajusta **Menú ↔ − / +** en Ajustes:
+mueve solo el menú, los botones y el punto de mira, sin tocar el vídeo (que se ajusta con
+**Lentes − / +**).
 
 ## Compilar e instalar en el móvil desde un Mac
 

@@ -18,13 +18,46 @@ internal static class Shaders
         }
         """;
 
+    /// <remarks>
+    /// High precision matters: with mediump (16-bit on many GPUs) texture coordinates cannot address
+    /// every texel of a 4K/8K frame, which shows as jagged, stair-stepped edges.
+    /// </remarks>
     public const string VideoFragment = """
         #extension GL_OES_EGL_image_external : require
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         uniform samplerExternalOES uTexture;
         varying vec2 vTex;
         void main() {
             gl_FragColor = texture2D(uTexture, vTex);
+        }
+        """;
+
+    /// <summary>
+    /// "Calidad: alta": four samples per screen pixel on a rotated grid. Decoder textures have no
+    /// mipmaps, so a high-resolution video shrunk onto the screen otherwise shimmers and looks rough.
+    /// </summary>
+    public const string VideoFragmentSupersampled = """
+        #extension GL_OES_EGL_image_external : require
+        #extension GL_OES_standard_derivatives : enable
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
+        precision mediump float;
+        #endif
+        uniform samplerExternalOES uTexture;
+        varying vec2 vTex;
+        void main() {
+            vec2 dx = dFdx(vTex);
+            vec2 dy = dFdy(vTex);
+            vec4 c = texture2D(uTexture, vTex + dx * -0.125 + dy * -0.375)
+                   + texture2D(uTexture, vTex + dx *  0.375 + dy * -0.125)
+                   + texture2D(uTexture, vTex + dx *  0.125 + dy *  0.375)
+                   + texture2D(uTexture, vTex + dx * -0.375 + dy *  0.125);
+            gl_FragColor = c * 0.25;
         }
         """;
 
@@ -84,7 +117,11 @@ internal static class Shaders
     /// pincushion distortion of the viewer's lenses. Coefficients follow the usual Brown model.
     /// </summary>
     public const string DistortionFragment = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         uniform sampler2D uTexture;
         uniform vec2 uK;        // k1, k2
         uniform float uAspect;  // eye viewport width / height

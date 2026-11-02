@@ -62,6 +62,9 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private bool _prepared, _resumeOnStart;
     private int _videoWidth, _videoHeight, _consecutiveErrors, _ticks;
     private VideoState _state = new();
+    // The video _state belongs to. Saves always go here, never to Current: the playlist moves to the
+    // next video before the old one's state is saved.
+    private MediaItem? _stateItem;
     private VideoFormat _detected = VideoFormat.Default;
     /// <summary>Format chosen for the video's folder; only used when the file name has no format tags.</summary>
     private VideoFormat? _folderFormat;
@@ -120,6 +123,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
         _glView = new GLSurfaceView(this);
         _glView.SetEGLContextClientVersion(2);
+        _glView.SetEGLConfigChooser(new MultisampleConfigChooser());
         _glView.PreserveEGLContextOnPause = true;
         _glView.SetRenderer(_renderer);
         _glView.RenderMode = Rendermode.Continuously;
@@ -289,6 +293,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _settings.LastVideoUri = item.Location;
         _settings.LastVideoName = item.Name;
         _state = _store.Get(item);
+        _stateItem = item;
         _videoWidth = _videoHeight = 0;
         _detected = FormatDetector.Detect(item.Name);
         _folderFormat = FormatDetector.HasTags(item.Name) ? null : _store.GetFolderFormat(item);
@@ -352,7 +357,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void OnCompletion()
     {
-        if (Current is { } item)
+        if (_stateItem is { } item)
         {
             _state.PositionMs = 0;
             _store.Save(item, _state);
@@ -407,7 +412,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void SaveCurrentPosition()
     {
-        if (_player is null || !_prepared || Current is not { } item) return;
+        if (_player is null || !_prepared || _stateItem is not { } item) return;
         try { _state.PositionMs = _player.CurrentPosition; }
         catch (Java.Lang.IllegalStateException) { return; }
         _store.Save(item, _state);
@@ -415,7 +420,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
 
     private void SaveVideoState()
     {
-        if (Current is { } item) _store.Save(item, _state, flush: true);
+        if (_stateItem is { } item) _store.Save(item, _state, flush: true);
     }
 
     private long Position => _prepared && _player is not null ? _player.CurrentPosition : 0;
@@ -520,6 +525,11 @@ public class PlayerActivity : Activity, VrRenderer.IHost
                 MenuAction.TuneNadir or MenuAction.TuneReset:
                 ApplyTuning(action);
                 break;
+            case MenuAction.TuneFolder: ToggleFolderTuning(); break;
+            case MenuAction.MenuShiftMinus: _settings.MenuShift = Math.Clamp(MathF.Round(_settings.MenuShift - 0.005f, 3), -0.2f, 0.2f); break;
+            case MenuAction.MenuShiftPlus: _settings.MenuShift = Math.Clamp(MathF.Round(_settings.MenuShift + 0.005f, 3), -0.2f, 0.2f); break;
+            case MenuAction.Quality: _settings.HighQuality = !_settings.HighQuality; break;
+            case MenuAction.EdgeButtons: _settings.EdgeButtonsAngle = ControlSizes.NextEdgeAngle(_settings.EdgeButtonsAngle); break;
             case MenuAction.Opacity:
                 _settings.ControlsOpacity = ControlSizes.NextOpacity(_settings.ControlsOpacity);
                 ApplyOverlaySize();
@@ -557,18 +567,30 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         SaveVideoState();
     }
 
-    /// <summary>
-    /// "Ajuste fino": the tuned format becomes this video's format and, like a format chosen by hand,
-    /// the default for the other untagged videos of its folder.
-    /// </summary>
+    /// <summary>"Ajuste fino": changes this video's format only (see <see cref="ToggleFolderTuning"/>).</summary>
     private void ApplyTuning(MenuAction action)
     {
-        if (FineTuning.Apply(CurrentFormat, action) is not { } tuned || Current is not { } item) return;
+        if (FineTuning.Apply(CurrentFormat, action) is not { } tuned || _stateItem is not { } item) return;
         // Buttons auto-repeat while looked at, so the folder file is written by the periodic flush.
         _state.FormatOverride = tuned;
         _store.Save(item, _state);
-        _folderFormat = tuned;
-        _store.SetFolderFormat(item, tuned, flush: false);
+    }
+
+    /// <summary>True when the folder's default format is exactly this video's fine-tuned format.</summary>
+    private bool FolderUsesThisTuning => CurrentFormat.IsTuned && _folderFormat == CurrentFormat;
+
+    /// <summary>
+    /// Explicitly shares this video's fine tuning with the untagged videos of its folder, or stops
+    /// sharing it (the folder keeps the plain format).
+    /// </summary>
+    private void ToggleFolderTuning()
+    {
+        if (_stateItem is not { } item) return;
+        bool remove = FolderUsesThisTuning;
+        _folderFormat = remove ? CurrentFormat.WithoutTuning() : CurrentFormat;
+        _store.SetFolderFormat(item, _folderFormat);
+        Toast.MakeText(this, remove ? "La carpeta ya no usa este ajuste fino" : "Los videos sin etiqueta de esta carpeta usarán este ajuste",
+            ToastLength.Short)!.Show();
     }
 
     // ---- Spots ("marcas") ----
@@ -618,7 +640,7 @@ public class PlayerActivity : Activity, VrRenderer.IHost
     private void SpotsChanged()
     {
         _spots = _state.Spots.ToArray();
-        if (Current is { } item)
+        if (_stateItem is { } item)
         {
             _thumbs.SetVideo(item.Location, CurrentFormat);
             _thumbs.Request(_spots);
@@ -641,12 +663,12 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         }
         SaveVideoState();
 
-        // Also remember it for the other videos of this folder whose names carry no format tags;
-        // going back to "auto" forgets it.
-        if (Current is { } item)
+        // Also remember the plain format for the other videos of this folder whose names carry no
+        // format tags (fine tuning is shared only on request); going back to "auto" forgets it.
+        if (_stateItem is { } item)
         {
-            _folderFormat = _state.FormatOverride;
-            _store.SetFolderFormat(item, _state.FormatOverride);
+            _folderFormat = _state.FormatOverride?.WithoutTuning();
+            _store.SetFolderFormat(item, _folderFormat);
         }
         string note = _state.FormatOverride is null ? " (auto)" : " · se usará en esta carpeta";
         Toast.MakeText(this, "Formato: " + CurrentFormat.Label + note, ToastLength.Short)!.Show();
@@ -675,7 +697,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
         _renderer.Config = new RenderConfig(CurrentFormat, _videoWidth, _videoHeight,
             _state.Pitch, _state.Roll, _state.Yaw, _settings.StereoView,
             _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
-            ControlSizes.MenuScale(_settings.ControlsSize), _settings.ControlsOpacity);
+            ControlSizes.MenuScale(_settings.ControlsSize), _settings.ControlsOpacity,
+            _settings.MenuShift, _settings.HighQuality, _settings.EdgeButtonsAngle);
     }
 
     private MenuModel BuildMenuModel()
@@ -691,7 +714,8 @@ public class PlayerActivity : Activity, VrRenderer.IHost
             _playlist.Repeat, vol, CurrentFormat, CurrentFormat.Label, FormatNote, _state.Pitch, _state.Roll,
             _state.Yaw, _settings.Fov, _settings.IpdShift, _settings.LensLevel, _settings.GazeClick,
             Math.Max(0, _playlist.Order.ToList().IndexOf(_playlist.CurrentIndex)), _playlist.Count,
-            _settings.ControlsSize, _settings.ControlsOpacity, _spots, _spotPage, _spotDeleteMode, _thumbs.Version);
+            _settings.ControlsSize, _settings.ControlsOpacity, _spots, _spotPage, _spotDeleteMode, _thumbs.Version,
+            _settings.MenuShift, _settings.HighQuality, _settings.EdgeButtonsAngle, FolderUsesThisTuning);
     }
 
     // ---- Periodic update ----

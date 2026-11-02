@@ -55,6 +55,9 @@ internal sealed class MenuPainter : IDisposable
                 MenuAction.Dwell => m.GazeClick,
                 MenuAction.SpotDeleteMode => m.SpotDeleteMode,
                 MenuAction.TuneNadir => m.Format.NadirDeg > 0,
+                MenuAction.TuneFolder => m.FolderUsesTuning,
+                MenuAction.Quality => m.HighQuality,
+                MenuAction.EdgeButtons => m.EdgeButtonsAngle > 0,
                 _ => false,
             };
             bool enabled = FineTuning.Applies(b.Action, m.Format.Projection);
@@ -87,6 +90,25 @@ internal sealed class MenuPainter : IDisposable
         text.SetShadowLayer(6, 0, 0, Color.Black);
         c.DrawText("Inclina la cabeza hasta que esta línea quede sobre el horizonte del video", w / 2f, h / 2f - 40, text);
         c.DrawText("y quédate quieto · toca la pantalla para cancelar", w / 2f, h / 2f + 66, text);
+        return bmp;
+    }
+
+    /// <summary>Always-visible previous / next video button shown at the side of the view.</summary>
+    public static Bitmap PaintEdgeButton(bool next)
+    {
+        const int size = 256;
+        var bmp = Bitmap.CreateBitmap(size, size, Bitmap.Config.Argb8888!)!;
+        var c = new Canvas(bmp);
+        using var fill = new Paint { AntiAlias = true, Color = Color.Argb(200, 18, 24, 32) };
+        c.DrawCircle(size / 2f, size / 2f, size / 2f - 4, fill);
+        using var ring = new Paint { AntiAlias = true, Color = Color.Argb(255, 79, 195, 247), StrokeWidth = 6 };
+        ring.SetStyle(Paint.Style.Stroke);
+        c.DrawCircle(size / 2f, size / 2f, size / 2f - 6, ring);
+        using var text = new Paint { AntiAlias = true, Color = Color.White, TextAlign = Paint.Align.Center, TextSize = 92, FakeBoldText = true };
+        c.DrawText(next ? "▶|" : "|◀", size / 2f, size / 2f + 20, text);
+        text.TextSize = 30;
+        text.FakeBoldText = false;
+        c.DrawText(next ? "Siguiente" : "Anterior", size / 2f, size / 2f + 74, text);
         return bmp;
     }
 

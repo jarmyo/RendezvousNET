@@ -143,3 +143,40 @@ public class FolderKeyTests
         Assert.Equal("/sdcard/Movies", MediaUtil.FolderKey("/sdcard/Movies/x.mp4"));
     }
 }
+
+public class RecenterTests
+{
+    private static void Near(Vector3 expected, Vector3 actual) =>
+        Assert.True(Vector3.Distance(expected, actual) < 1e-3f, $"expected {expected}, got {actual}");
+
+    [Theory]
+    [InlineData(0f, 0f)]
+    [InlineData(40f, 25f)]
+    [InlineData(-120f, -35f)]
+    public void Recentering_puts_the_video_front_where_the_head_looks(float yawDeg, float pitchDeg)
+    {
+        // Direction the user looks at, in scene space.
+        var look = Vector3.TransformNormal(-Vector3.UnitZ,
+            Matrix4x4.CreateRotationX(pitchDeg * VrMath.Deg2Rad) * Matrix4x4.CreateRotationY(yawDeg * VrMath.Deg2Rad));
+        float yaw = VrMath.YawOf(look), pitch = VrMath.PitchOf(look);
+
+        var model = VrMath.VideoModel(0, 0, 0, yaw, pitch);
+        Near(look, Vector3.TransformNormal(-Vector3.UnitZ, model));
+        // The video's up stays in the vertical plane (no roll is introduced).
+        var right = Vector3.TransformNormal(Vector3.UnitX, model);
+        Assert.Equal(0f, right.Y, 3);
+    }
+
+    [Fact]
+    public void Set_horizon_still_holds_with_a_vertical_recenter()
+    {
+        var view = Matrix4x4.Transpose(Matrix4x4.CreateRotationZ(0.1f) * Matrix4x4.CreateRotationX(-0.3f) * Matrix4x4.CreateRotationY(0.8f));
+        var before = VrMath.VideoModel(2, 3, 4, 0.5f, 0.2f) * view;
+        var (p, r, y) = VrMath.HorizonFromView(2, 3, 4, 0.5f, view, 0.2f);
+        var levelHead = Matrix4x4.CreateRotationY(-VrMath.YawOf(VrMath.Forward(view)));
+        var after = VrMath.VideoModel(p, r, y, VrMath.YawOf(VrMath.Forward(view))) * levelHead;
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                Assert.Equal(before[i, j], after[i, j], 3);
+    }
+}

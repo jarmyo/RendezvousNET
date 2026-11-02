@@ -113,6 +113,30 @@ internal sealed class AppSettings
         if (_videos.Contains(location)) _videos.Edit()!.Remove(location)!.Apply();
     }
 
+    /// <summary>
+    /// Extra horizontal per-eye offset for the menu and buttons (NDC units), on top of the lens
+    /// spacing, so they can be lined up independently of the video.
+    /// </summary>
+    public float MenuShift
+    {
+        get => _prefs.GetFloat("menuShift", 0f);
+        set => Edit(e => e.PutFloat("menuShift", value));
+    }
+
+    /// <summary>Smoother rendering of high-resolution video (supersampling) and antialiased edges.</summary>
+    public bool HighQuality
+    {
+        get => _prefs.GetBoolean("highQuality", true);
+        set => Edit(e => e.PutBoolean("highQuality", value));
+    }
+
+    /// <summary>Angle (degrees from the front) of the always-visible previous/next buttons; 0 = hidden.</summary>
+    public float EdgeButtonsAngle
+    {
+        get => _prefs.GetFloat("edgeButtons", 40f);
+        set => Edit(e => e.PutFloat("edgeButtons", value));
+    }
+
     /// <summary>Opacity of the VR menu and the touch controls (0.3 to 1).</summary>
     public float ControlsOpacity
     {

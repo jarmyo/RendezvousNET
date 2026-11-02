@@ -68,12 +68,18 @@ public static class VrMath
 
     /// <summary>
     /// Model transform for the video: first the stored horizon correction (roll, then pitch,
-    /// then yaw), then the session recenter yaw.
+    /// then yaw), then the session recenter (tilt up/down by <paramref name="recenterPitchRad"/>,
+    /// then turn by <paramref name="recenterYawRad"/>), so the video's front sits where the user looked.
     /// </summary>
-    public static Matrix4x4 VideoModel(float pitchDeg, float rollDeg, float yawDeg, float recenterYawRad) =>
+    public static Matrix4x4 VideoModel(float pitchDeg, float rollDeg, float yawDeg, float recenterYawRad, float recenterPitchRad = 0f) =>
         Matrix4x4.CreateRotationZ(rollDeg * Deg2Rad)
         * Matrix4x4.CreateRotationX(pitchDeg * Deg2Rad)
-        * Matrix4x4.CreateRotationY(yawDeg * Deg2Rad + recenterYawRad);
+        * Matrix4x4.CreateRotationY(yawDeg * Deg2Rad)
+        * Recenter(recenterYawRad, recenterPitchRad);
+
+    /// <summary>Session recenter: tilts the scene front up/down, then turns it.</summary>
+    public static Matrix4x4 Recenter(float yawRad, float pitchRad) =>
+        Matrix4x4.CreateRotationX(pitchRad) * Matrix4x4.CreateRotationY(yawRad);
 
     /// <summary>
     /// Inverse of <see cref="VideoModel"/> (with no recenter): splits a rotation built as
@@ -94,12 +100,12 @@ public static class VrMath
     /// (<c>YawOf(Forward(view))</c>), so the stored yaw stays relative to the video, not to the room.
     /// </summary>
     public static (float PitchDeg, float RollDeg, float YawDeg) HorizonFromView(
-        float pitchDeg, float rollDeg, float yawDeg, float recenterYawRad, in Matrix4x4 view)
+        float pitchDeg, float rollDeg, float yawDeg, float recenterYawRad, in Matrix4x4 view, float recenterPitchRad = 0f)
     {
         // Seen now: VideoModel(current) * view. After recentering on the head yaw ψ and straightening
         // the head (view = RotY(-ψ)), the view becomes C1 * RotY(ψ) * RotY(-ψ) = C1, so C1 must be
         // exactly what is seen now.
-        var seen = VideoModel(pitchDeg, rollDeg, yawDeg, recenterYawRad) * view;
+        var seen = VideoModel(pitchDeg, rollDeg, yawDeg, recenterYawRad, recenterPitchRad) * view;
         return DecomposeHorizon(seen);
     }
 

@@ -41,6 +41,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private const float GuideWidth = 6f;
     private const float GuideHeight = GuideWidth / 8f;
     private const float HorizonCaptureTimeoutSeconds = 30f;
+    /// <summary>Size of the always-visible previous/next buttons (about 10° at the panel distance).</summary>
+    private const float EdgeSize = 0.36f;
 
     private readonly HeadTracker _tracker;
     private readonly IHost _host;
@@ -63,11 +65,11 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private volatile bool _frameAvailable;
 
     // GL resources
-    private int _videoProgram, _texProgram, _reticleProgram, _distortProgram;
-    private int _oesTexture, _panelTexture, _guideTexture, _nadirTexture, _reticleVbo;
+    private int _videoProgram, _videoProgramHq, _texProgram, _reticleProgram, _distortProgram;
+    private int _oesTexture, _panelTexture, _guideTexture, _nadirTexture, _prevTexture, _nextTexture, _reticleVbo;
     private int _fbo, _fboTexture, _fboWidth, _fboHeight;
     private SurfaceTexture? _surfaceTexture;
-    private GlMesh? _videoMesh, _panelMesh, _guideMesh, _nadirMesh, _screenQuad;
+    private GlMesh? _videoMesh, _panelMesh, _guideMesh, _nadirMesh, _edgeMesh, _screenQuad;
     private (VideoFormat, float) _videoMeshKey;
     private float _nadirMeshDeg;
     private MenuPainter? _painter;
@@ -79,7 +81,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private readonly float[] _rotation = new float[9];
     private Matrix4x4 _headView = Matrix4x4.Identity;
     private bool _hasPose, _autoRecenterDone;
-    private float _recenterYaw;
+    private float _recenterYaw, _recenterPitch;
     private long _lastFrameNanos;
 
     // Menu state (GL thread only)
@@ -93,6 +95,11 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private MenuPage _paintedPage;
     private MenuAction _paintedHover;
     private int _hoveredSlot, _paintedSlot;
+
+    // Always-visible previous / next buttons (GL thread only). A longer dwell than the menu, so just
+    // looking around the scene does not change the video.
+    private readonly GazeDwell _edgeDwell = new() { DwellSeconds = 2f };
+    private MenuAction _hoveredEdge;
     private bool _panelDirty = true;
 
     // "Set horizon with the head" (GL thread only)
@@ -110,6 +117,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         Android.Opengl.Matrix.SetIdentityM(_stMatrix, 0);
     }
 
+    /// <summary>Puts the front of the video where the user is looking, up/down included.</summary>
     public void RequestRecenter() => _recenterRequested = true;
 
     // ---- Menu control (GL thread, via QueueEvent) ----
@@ -158,6 +166,11 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     public void Trigger()
     {
         if (_capturing) { CancelHorizonCapture(); return; }
+        if (!_menuVisible && _hoveredEdge != MenuAction.None)
+        {
+            _host.OnMenuAction(_hoveredEdge, 0f, 0);
+            return;
+        }
         if (!_menuVisible) { ShowMenu(MenuPage.Main); return; }
         var f = VrMath.Forward(CurrentView());
         var hit = HitPanel(f, Config);
@@ -200,16 +213,28 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     public void OnSurfaceCreated(IGL10? gl, EGLConfig? config)
     {
         _videoProgram = GlUtil.CreateProgram(Shaders.VideoVertex, Shaders.VideoFragment);
+        try
+        {
+            _videoProgramHq = GlUtil.CreateProgram(Shaders.VideoVertex, Shaders.VideoFragmentSupersampled);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // GPUs without derivatives for external textures keep the single-sample shader.
+            Android.Util.Log.Warn("VrView", "Supersampling unavailable: " + ex.Message);
+            _videoProgramHq = _videoProgram;
+        }
         _texProgram = GlUtil.CreateProgram(Shaders.TexturedVertex, Shaders.TexturedFragment);
         _reticleProgram = GlUtil.CreateProgram(Shaders.ReticleVertex, Shaders.ReticleFragment);
         _distortProgram = GlUtil.CreateProgram(Shaders.TexturedVertex, Shaders.DistortionFragment);
 
-        var tex = new int[4];
-        GLES20.GlGenTextures(4, tex, 0);
+        var tex = new int[6];
+        GLES20.GlGenTextures(6, tex, 0);
         _oesTexture = tex[0];
         _panelTexture = tex[1];
         _guideTexture = tex[2];
         _nadirTexture = tex[3];
+        _prevTexture = tex[4];
+        _nextTexture = tex[5];
         GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, _oesTexture);
         SetLinearClamp(GLES11Ext.GlTextureExternalOes);
         GLES20.GlBindTexture(GLES20.GlTexture2d, _panelTexture);
@@ -238,6 +263,17 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             nadirBitmap.Recycle();
         }
         _nadirMesh = null;
+        foreach (var (texture, next) in new[] { (_prevTexture, false), (_nextTexture, true) })
+        {
+            GLES20.GlBindTexture(GLES20.GlTexture2d, texture);
+            SetLinearClamp(GLES20.GlTexture2d);
+            using var bitmap = MenuPainter.PaintEdgeButton(next);
+            GLUtils.TexImage2D(GLES20.GlTexture2d, 0, bitmap, 0);
+            bitmap.Recycle();
+        }
+        var edge = MeshBuilder.Quad(EdgeSize, EdgeSize, 0);
+        for (int i = 4; i < edge.Vertices.Length; i += Mesh.FloatsPerVertex) edge.Vertices[i] = 1f - edge.Vertices[i];
+        _edgeMesh = new GlMesh(edge);
         _screenQuad = new GlMesh(MeshBuilder.Quad(2, 2, 0));
 
         var ids = new int[1];
@@ -295,14 +331,18 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
 
         if (_recenterRequested || (!_autoRecenterDone && _hasPose))
         {
-            // Put the front of the video where the user is looking (yaw only).
-            _recenterYaw = VrMath.YawOf(VrMath.Forward(view));
+            // Put the front of the video where the user is looking. The automatic recenter on start
+            // only turns (yaw); an explicit "Recentrar" also centers up/down, e.g. when lying down.
+            var forward = VrMath.Forward(view);
+            _recenterYaw = VrMath.YawOf(forward);
+            _recenterPitch = _recenterRequested ? VrMath.PitchOf(forward) : 0f;
             _recenterRequested = false;
             _autoRecenterDone = true;
         }
 
         UpdateHorizonCapture(view, cfg, dt);
         UpdateMenu(view, cfg, dt);
+        UpdateEdgeButtons(view, cfg, dt);
 
         GLES20.GlBindFramebuffer(GLES20.GlFramebuffer, 0);
         GLES20.GlViewport(0, 0, _width, _height);
@@ -317,7 +357,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         int eyeWidth = stereo ? _width / 2 : _width;
         bool distort = stereo && cfg.LensLevel > 0;
         var (hPitch, hRoll, hYaw) = _capturedHorizon ?? (cfg.Pitch, cfg.Roll, cfg.Yaw);
-        var model = VrMath.VideoModel(hPitch, hRoll, hYaw, _recenterYaw);
+        var model = VrMath.VideoModel(hPitch, hRoll, hYaw, _recenterYaw, _recenterPitch);
         var panelModel = Matrix4x4.CreateScale(cfg.MenuScale) * VrMath.PanelModel(_menuYaw, _menuPitch, PanelDistance);
 
         for (int eye = 0; eye < eyes; eye++)
@@ -334,21 +374,30 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
                 GLES20.GlViewport(eye * eyeWidth, 0, eyeWidth, _height);
             }
 
-            float shift = stereo ? (eye == 0 ? -cfg.IpdShift : cfg.IpdShift) : 0f;
-            var proj = VrMath.Projection(cfg.Fov, (float)eyeWidth / _height, 0.05f, 200f, shift);
+            float side = stereo ? (eye == 0 ? -1f : 1f) : 0f;
+            float aspect = (float)eyeWidth / _height;
+            var proj = VrMath.Projection(cfg.Fov, aspect, 0.05f, 200f, side * cfg.IpdShift);
+            // Menu, buttons and reticle can be lined up separately from the video.
+            var menuProj = VrMath.Projection(cfg.Fov, aspect, 0.05f, 200f, side * (cfg.IpdShift + cfg.MenuShift));
 
-            DrawVideo(model * view * proj, cfg.Format.EyeRect(stereo ? eye : 0));
+            DrawVideo(model * view * proj, cfg.Format.EyeRect(stereo ? eye : 0), cfg.HighQuality);
             if (cfg.Format.NadirDeg > 0 && cfg.Format.Projection != Projection.Flat)
                 DrawNadir(NadirDown * model * view * proj, cfg.Format.NadirDeg);
+            if (cfg.EdgeButtonsAngle > 0 && !_capturing)
+                DrawEdgeButtons(view * menuProj, cfg);
             if (_menuVisible)
             {
-                DrawPanel(panelModel * view * proj);
-                DrawReticle(proj, cfg.GazeClick ? _dwell.Progress : 0f, _hovered != MenuAction.None);
+                DrawPanel(panelModel * view * menuProj);
+                DrawReticle(menuProj, cfg.GazeClick ? _dwell.Progress : 0f, _hovered != MenuAction.None);
             }
             else if (_capturing)
             {
-                DrawGuide(proj);
-                DrawReticle(proj, _stillness.Progress, _stillness.Progress > 0);
+                DrawGuide(menuProj);
+                DrawReticle(menuProj, _stillness.Progress, _stillness.Progress > 0);
+            }
+            else if (_hoveredEdge != MenuAction.None)
+            {
+                DrawReticle(menuProj, cfg.GazeClick ? _edgeDwell.Progress : 0f, true);
             }
 
             if (distort)
@@ -383,16 +432,65 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         if (_captureSeconds > HorizonCaptureTimeoutSeconds) { CancelHorizonCapture(); return; }
         if (!_stillness.Update(VrMath.Forward(view), VrMath.Up(view), dt)) return;
 
-        var (p, r, y) = VrMath.HorizonFromView(cfg.Pitch, cfg.Roll, cfg.Yaw, _recenterYaw, view);
+        var (p, r, y) = VrMath.HorizonFromView(cfg.Pitch, cfg.Roll, cfg.Yaw, _recenterYaw, view, _recenterPitch);
         p = Math.Clamp(p, -90f, 90f);
         r = VideoState.NormalizeAngle(r);
         y = VideoState.NormalizeAngle(y);
         _recenterYaw = VrMath.YawOf(VrMath.Forward(view));
+        _recenterPitch = 0f; // the captured correction already includes the vertical part
         _capturedHorizon = (p, r, y);
         _capturedSeconds = 0;
         _capturing = false;
         Capturing = false;
         _host.OnHorizonCaptured(p, r, y);
+    }
+
+    /// <summary>Where a previous/next button sits: to the side of the video's front, at its height.</summary>
+    private (float Yaw, float Pitch) EdgePlacement(bool next, RenderConfig cfg) =>
+        (_recenterYaw + (next ? -1f : 1f) * cfg.EdgeButtonsAngle * VrMath.Deg2Rad, _recenterPitch);
+
+    private void UpdateEdgeButtons(Matrix4x4 view, RenderConfig cfg, float dt)
+    {
+        var hovered = MenuAction.None;
+        // The menu wins when the reticle is on it.
+        if (cfg.EdgeButtonsAngle > 0 && !_capturing && !(_menuVisible && _hovered != MenuAction.None))
+        {
+            var forward = VrMath.Forward(view);
+            for (int i = 0; i < 2; i++)
+            {
+                bool next = i == 1;
+                var (yaw, pitch) = EdgePlacement(next, cfg);
+                if (VrMath.PanelHit(forward, yaw, pitch, PanelDistance, EdgeSize, EdgeSize) is { } h &&
+                    h.X is >= 0 and <= 1 && h.Y is >= 0 and <= 1)
+                    hovered = next ? MenuAction.Next : MenuAction.Prev;
+            }
+        }
+        _hoveredEdge = hovered;
+        // Not repeatable: holding the gaze after a change of video does not skip again.
+        if (cfg.GazeClick && _edgeDwell.Update(hovered, 0, false, dt))
+            _host.OnMenuAction(hovered, 0f, 0);
+    }
+
+    private void DrawEdgeButtons(Matrix4x4 viewProj, RenderConfig cfg)
+    {
+        GLES20.GlEnable(GLES20.GlBlend);
+        GLES20.GlBlendFunc(GLES20.GlSrcAlpha, GLES20.GlOneMinusSrcAlpha);
+        GLES20.GlUseProgram(_texProgram);
+        int alphaLoc = GLES20.GlGetUniformLocation(_texProgram, "uAlpha");
+        GLES20.GlActiveTexture(GLES20.GlTexture0);
+        GLES20.GlUniform1i(GLES20.GlGetUniformLocation(_texProgram, "uTexture"), 0);
+        for (int i = 0; i < 2; i++)
+        {
+            bool next = i == 1;
+            var (yaw, pitch) = EdgePlacement(next, cfg);
+            VrMath.ToGl(VrMath.PanelModel(yaw, pitch, PanelDistance) * viewProj, _mvp);
+            GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_texProgram, "uMvp"), 1, false, _mvp, 0);
+            bool hovered = _hoveredEdge == (next ? MenuAction.Next : MenuAction.Prev);
+            GLES20.GlUniform1f(alphaLoc, cfg.MenuOpacity * (hovered ? 1f : 0.6f));
+            GLES20.GlBindTexture(GLES20.GlTexture2d, next ? _nextTexture : _prevTexture);
+            _edgeMesh!.Draw(GLES20.GlGetAttribLocation(_texProgram, "aPosition"), GLES20.GlGetAttribLocation(_texProgram, "aUv"));
+        }
+        GLES20.GlDisable(GLES20.GlBlend);
     }
 
     private void UpdateMenu(Matrix4x4 view, RenderConfig cfg, float dt)
@@ -474,27 +572,29 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         _videoMesh?.Dispose();
         _videoMesh = new GlMesh(f.Projection switch
         {
-            Projection.Sphere360 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, latSpanDeg: f.EquirectVFov),
-            Projection.Dome180 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, 64, 48, f.EquirectVFov),
-            Projection.Fisheye => MeshBuilder.Fisheye(SphereRadius, f.FisheyeFov, lens: f.Lens,
+            // Dense meshes keep straight lines of the picture straight (16-bit indices allow ~65k vertices).
+            Projection.Sphere360 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, 192, 96, f.EquirectVFov),
+            Projection.Dome180 => MeshBuilder.Equirect(SphereRadius, f.EquirectHFov, 128, 96, f.EquirectVFov),
+            Projection.Fisheye => MeshBuilder.Fisheye(SphereRadius, f.FisheyeFov, 96, 192, lens: f.Lens,
                 centerX: f.CenterX, centerY: f.CenterY, radiusScale: f.RadiusScale),
             _ => MeshBuilder.Quad(FlatWidth, FlatWidth / Math.Max(aspect, 0.1f), FlatDistance),
         });
         _videoMeshKey = key;
     }
 
-    private void DrawVideo(Matrix4x4 mvp, UvRect eyeRect)
+    private void DrawVideo(Matrix4x4 mvp, UvRect eyeRect, bool highQuality)
     {
         if (_videoMesh is null) return;
-        GLES20.GlUseProgram(_videoProgram);
+        int program = highQuality ? _videoProgramHq : _videoProgram;
+        GLES20.GlUseProgram(program);
         VrMath.ToGl(mvp, _mvp);
-        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_videoProgram, "uMvp"), 1, false, _mvp, 0);
-        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(_videoProgram, "uStMatrix"), 1, false, _stMatrix, 0);
-        GLES20.GlUniform4f(GLES20.GlGetUniformLocation(_videoProgram, "uEyeRect"), eyeRect.ScaleU, eyeRect.ScaleV, eyeRect.OffsetU, eyeRect.OffsetV);
+        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(program, "uMvp"), 1, false, _mvp, 0);
+        GLES20.GlUniformMatrix4fv(GLES20.GlGetUniformLocation(program, "uStMatrix"), 1, false, _stMatrix, 0);
+        GLES20.GlUniform4f(GLES20.GlGetUniformLocation(program, "uEyeRect"), eyeRect.ScaleU, eyeRect.ScaleV, eyeRect.OffsetU, eyeRect.OffsetV);
         GLES20.GlActiveTexture(GLES20.GlTexture0);
         GLES20.GlBindTexture(GLES11Ext.GlTextureExternalOes, _oesTexture);
-        GLES20.GlUniform1i(GLES20.GlGetUniformLocation(_videoProgram, "uTexture"), 0);
-        _videoMesh.Draw(GLES20.GlGetAttribLocation(_videoProgram, "aPosition"), GLES20.GlGetAttribLocation(_videoProgram, "aUv"));
+        GLES20.GlUniform1i(GLES20.GlGetUniformLocation(program, "uTexture"), 0);
+        _videoMesh.Draw(GLES20.GlGetAttribLocation(program, "aPosition"), GLES20.GlGetAttribLocation(program, "aUv"));
     }
 
     private void PaintPanelIfNeeded()

@@ -19,9 +19,13 @@ internal sealed record RenderConfig(
     int LensLevel,
     bool GazeClick,
     float MenuScale,
-    float MenuOpacity)
+    float MenuOpacity,
+    float MenuShift,
+    bool HighQuality,
+    float EdgeButtonsAngle)
 {
-    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true, ControlSizes.MenuScale(1), 0.9f);
+    public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, true, 95f, 0f, 0, true, ControlSizes.MenuScale(1), 0.9f,
+        0f, true, 40f);
 
     /// <summary>Lens pre-distortion coefficients (k1, k2) for each "Lente" level.</summary>
     public (float K1, float K2) LensCoefficients => LensLevel switch
@@ -60,10 +64,14 @@ internal sealed record MenuModel(
     long[] Spots,
     int SpotPage,
     bool SpotDeleteMode,
-    int ThumbsVersion)
+    int ThumbsVersion,
+    float MenuShift,
+    bool HighQuality,
+    float EdgeButtonsAngle,
+    bool FolderUsesTuning)
 {
     public static MenuModel Empty => new("", 0, 0, false, false, RepeatMode.All, 0, VideoFormat.Default, "", "auto", 0, 0, 0, 95, 0, 0, true, 0, 0, 1,
-        0.9f, [], 0, false, 0);
+        0.9f, [], 0, false, 0, 0f, true, 40f, false);
 
     public int SpotPageCount => Math.Max(1, (Spots.Length + VrMenuLayout.SpotsPerPage - 1) / VrMenuLayout.SpotsPerPage);
 
@@ -81,6 +89,15 @@ internal static class ControlSizes
     public static string Label(int size) => size switch { 0 => "chicos", 1 => "medianos", _ => "grandes" };
 
     private static readonly float[] Opacities = [1f, 0.8f, 0.6f, 0.4f];
+
+    private static readonly float[] EdgeAngles = [0f, 30f, 40f, 50f];
+
+    /// <summary>Next value of the previous/next buttons cycle: off → 30° → 40° → 50° → off.</summary>
+    public static float NextEdgeAngle(float current)
+    {
+        int i = Array.FindIndex(EdgeAngles, a => MathF.Abs(a - current) < 0.5f);
+        return EdgeAngles[(i + 1) % EdgeAngles.Length];
+    }
 
     /// <summary>Next value of the "Opacidad" cycle: 100 → 80 → 60 → 40 → 100 %.</summary>
     public static float NextOpacity(float current)
@@ -157,6 +174,11 @@ internal static class Labels
         MenuAction.TuneLens => "Lente: " + FineTuning.LensLabel(m.Format.Lens),
         MenuAction.TuneNadir => m.Format.NadirDeg > 0 ? $"Tapa abajo: {m.Format.NadirDeg:0}°" : "Tapa abajo: no",
         MenuAction.TuneReset => "Restablecer",
+        MenuAction.TuneFolder => m.FolderUsesTuning ? "Carpeta: quitar" : "Usar en carpeta",
+        MenuAction.MenuShiftMinus => "Menú ↔ −",
+        MenuAction.MenuShiftPlus => "Menú ↔ +",
+        MenuAction.Quality => m.HighQuality ? "Calidad: alta" : "Calidad: normal",
+        MenuAction.EdgeButtons => m.EdgeButtonsAngle > 0 ? $"Botones ◀▶: {m.EdgeButtonsAngle:0}°" : "Botones ◀▶: no",
         _ => "",
     };
 
@@ -168,7 +190,7 @@ internal static class Labels
             ? "Marcas · aún no hay: pulsa «＋ Marca» para guardar el momento actual"
             : $"Marcas · {m.Spots.Length} · página {m.SpotPage + 1}/{m.SpotPageCount}" +
               (m.SpotDeleteMode ? " · mira una marca para BORRARLA" : " · mira una marca para saltar a ella"),
-        MenuPage.Settings => $"Ajustes · campo de visión {m.Fov:0}° · separación lentes {m.IpdShift * 100:+0;-0;0}",
+        MenuPage.Settings => $"Ajustes · campo de visión {m.Fov:0}° · separación lentes {m.IpdShift * 100:+0;-0;0} · menú {m.MenuShift * 100:+0;-0;0}",
         _ => $"{MediaUtil.FormatTime(m.PositionMs)} / {MediaUtil.FormatTime(m.DurationMs)}   ·   {m.FormatText}   ·   Vol {m.VolumePercent}%   ·   {m.Index + 1}/{m.Count}",
     };
 }
