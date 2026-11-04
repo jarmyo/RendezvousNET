@@ -11,6 +11,11 @@ Está escrito en **C# con .NET 10 para Android** (`net10.0-android`), con vistas
 Android y OpenGL ES 2.0. No usa Unity ni MAUI: solo el SDK de Android, `MediaPlayer` del sistema y
 ZXing.Net para leer el código QR del visor.
 
+La app es gratis y viene completa, en inglés, español, francés y alemán: sigue el idioma del teléfono
+(o el de la app, en Android 13 y posteriores). Los textos están en `src/VrView.Core/Translations.cs`.
+Tiene un botón opcional para invitar una cerveza con Google Play. El material para publicarla está en
+[`store/`](store/README.md).
+
 ## Funciones
 
 | Función | Detalle |

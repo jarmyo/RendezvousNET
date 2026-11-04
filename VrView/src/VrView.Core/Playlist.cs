@@ -150,8 +150,8 @@ public sealed class Playlist
 
     public static string RepeatLabel(RepeatMode mode) => mode switch
     {
-        RepeatMode.Off => "Repetir: no",
-        RepeatMode.All => "Repetir: todo",
-        _ => "Repetir: uno",
+        RepeatMode.Off => T("Repeat: off"),
+        RepeatMode.All => T("Repeat: all"),
+        _ => T("Repeat: one"),
     };
 }

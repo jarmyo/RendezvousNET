@@ -31,14 +31,18 @@ public class MainActivity : Activity
     private CheckBox _subfolders = null!;
     private ProgressBar _progress = null!;
     private CancellationTokenSource? _scan;
+    private TipJar _tipJar = null!;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        AppLanguage.Apply(this);
         _settings = new AppSettings(this);
         _store = new VideoStore(this, _settings);
         SetContentView(BuildLayout());
         UpdateToggleLabels();
+        _tipJar = new TipJar(this);
+        _ = _tipJar.FinishPendingAsync();
 
         var folder = _settings.LastFolderUri;
         if (folder is not null && HasPermission(folder))
@@ -46,7 +50,7 @@ public class MainActivity : Activity
             _settings.AddRecentFolder(folder);
             LoadFolder(Uri.Parse(folder)!);
         }
-        else ShowEmpty("Elige una carpeta con tus vídeos VR para crear la lista de reproducción.");
+        else ShowEmpty(T("Choose a folder with your VR videos to build the playlist."));
     }
 
     protected override void OnResume()
@@ -60,6 +64,7 @@ public class MainActivity : Activity
     protected override void OnDestroy()
     {
         _scan?.Cancel();
+        _tipJar.Close();
         base.OnDestroy();
     }
 
@@ -79,14 +84,14 @@ public class MainActivity : Activity
         title.SetTextColor(Color.White);
         root.AddView(title);
 
-        _folderText = new TextView(this) { Text = "Sin carpeta" };
+        _folderText = new TextView(this) { Text = T("No folder") };
         _folderText.SetTextColor(Color.Rgb(176, 190, 197));
         _folderText.SetPadding(0, 0, 0, Dp(8));
         root.AddView(_folderText);
 
         var row1 = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        var pick = MakeButton("Elegir carpeta", (_, _) => PickFolder());
-        _playButton = MakeButton("▶ Reproducir", (_, _) => PlayAll());
+        var pick = MakeButton(T("Choose folder"), (_, _) => PickFolder());
+        _playButton = MakeButton(T("▶ Play"), (_, _) => PlayAll());
         row1.AddView(pick, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         row1.AddView(_playButton, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         root.AddView(row1);
@@ -109,7 +114,7 @@ public class MainActivity : Activity
         _viewerButton = MakeButton("", (_, _) => ViewerMenu());
         root.AddView(_viewerButton);
 
-        _subfolders = new CheckBox(this) { Text = "Incluir subcarpetas", Checked = _settings.IncludeSubfolders };
+        _subfolders = new CheckBox(this) { Text = T("Include subfolders"), Checked = _settings.IncludeSubfolders };
         _subfolders.SetTextColor(Color.White);
         _subfolders.CheckedChange += (_, e) =>
         {
@@ -139,12 +144,13 @@ public class MainActivity : Activity
 
         var help = new TextView(this)
         {
-            Text = "En el visor: toca la pantalla (botón del visor) o mira hacia abajo para abrir el menú; " +
-                   "apunta con el punto central y espera o vuelve a tocar para pulsar.",
+            Text = T("In the viewer: tap the screen (viewer button) or look down to open the menu; aim with the center dot and wait, or tap again, to press."),
         };
         help.SetTextColor(Color.Rgb(120, 134, 140));
         help.SetTextSize(Android.Util.ComplexUnitType.Sp, 12);
         root.AddView(help);
+
+        root.AddView(MakeButton(T("🍺 Buy me a beer"), (_, _) => TipMenu()));
         return root;
     }
 
@@ -159,9 +165,9 @@ public class MainActivity : Activity
     private void UpdateToggleLabels()
     {
         var viewer = _settings.ViewerUrl is { } url ? ViewerProfile.FromUrl(url) : null;
-        _viewerButton.Text = viewer is null ? "Visor: genérico · escanear su código QR"
-            : $"Visor: {viewer.Vendor} {viewer.Model}".Trim() + " · cambiar";
-        _shuffleButton.Text = _settings.Shuffle ? "Aleatorio: sí" : "Aleatorio: no";
+        _viewerButton.Text = viewer is null ? T("Viewer: generic · scan its QR code")
+            : F("Viewer: {0} · change", $"{viewer.Vendor} {viewer.Model}".Trim());
+        _shuffleButton.Text = _settings.Shuffle ? T("Shuffle: on") : T("Shuffle: off");
         _repeatButton.Text = Playlist.RepeatLabel(_settings.Repeat);
     }
 
@@ -169,11 +175,11 @@ public class MainActivity : Activity
     {
         string? uri = _settings.LastVideoUri;
         if (uri is null) { _resumeButton.Visibility = ViewStates.Gone; return; }
-        string name = _settings.LastVideoName ?? "último vídeo";
+        string name = _settings.LastVideoName ?? T("last video");
         var state = _store.Get(new MediaItem(uri, name));
         _resumeButton.Text = state.PositionMs > 0
-            ? $"Continuar: {name} ({MediaUtil.FormatTime(state.PositionMs)})"
-            : $"Continuar: {name}";
+            ? F("Continue: {0} ({1})", name, MediaUtil.FormatTime(state.PositionMs))
+            : F("Continue: {0}", name);
         _resumeButton.Visibility = ViewStates.Visible;
     }
 
@@ -199,7 +205,7 @@ public class MainActivity : Activity
         }
         catch (ActivityNotFoundException)
         {
-            Toast.MakeText(this, "Este dispositivo no tiene selector de carpetas.", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("This device has no folder picker."), ToastLength.Long)!.Show();
         }
     }
 
@@ -235,7 +241,7 @@ public class MainActivity : Activity
         bool recursive = _settings.IncludeSubfolders;
         _progress.Visibility = ViewStates.Visible;
         _emptyText.Visibility = ViewStates.Gone;
-        _folderText.Text = "Carpeta: " + FolderScanner.FolderName(ContentResolver!, tree);
+        _folderText.Text = F("Folder: {0}", FolderScanner.FolderName(ContentResolver!, tree));
 
         Task.Run(() =>
         {
@@ -257,11 +263,21 @@ public class MainActivity : Activity
                 _items.Clear();
                 if (found is not null) _items.AddRange(found);
                 _adapter.NotifyDataSetChanged();
-                _folderText.Text = $"Carpeta: {FolderScanner.FolderName(ContentResolver!, tree)} · {_items.Count} vídeos";
-                if (error is not null) ShowEmpty("No se pudo leer la carpeta: " + error);
-                else if (_items.Count == 0) ShowEmpty("No hay vídeos en esta carpeta.");
+                _folderText.Text = F("Folder: {0}", FolderScanner.FolderName(ContentResolver!, tree)) + " · " + VideoCount(_items.Count);
+                if (error is not null) ShowEmpty(F("Could not read the folder: {0}", error));
+                else if (_items.Count == 0) ShowEmpty(T("No videos in this folder."));
             });
         });
+    }
+
+    private void TipMenu()
+    {
+        new AlertDialog.Builder(this)
+            .SetTitle(T("🍺 Buy me a beer"))!
+            .SetMessage(T("The app is free and fully unlocked. If you enjoy it, you can buy the developer a beer."))!
+            .SetPositiveButton(T("🍺 Buy me a beer"), (_, _) => _ = _tipJar.BuyAsync())!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
+            .Show();
     }
 
     // ---- Viewer profile (Cardboard QR code) ----
@@ -269,10 +285,9 @@ public class MainActivity : Activity
     private void ViewerMenu()
     {
         new AlertDialog.Builder(this)
-            .SetTitle("Perfil del visor")!
-            .SetMessage("El código QR impreso en muchos visores trae sus lentes y su campo de visión. " +
-                        "Tómale una foto (o búscalo en internet) y elígela aquí.")!
-            .SetItems(["Elegir foto del código QR", "Escribir la dirección del código", "Quitar el perfil"], (_, e) =>
+            .SetTitle(T("Viewer profile"))!
+            .SetMessage(T("The QR code printed on many viewers holds their lenses and field of view. Take a photo of it (or find it online) and choose it here."))!
+            .SetItems([T("Choose a photo of the QR code"), T("Type the code's address"), T("Remove the profile")], (_, e) =>
             {
                 switch (e.Which)
                 {
@@ -281,7 +296,7 @@ public class MainActivity : Activity
                         intent.SetType("image/*");
                         intent.AddCategory(Intent.CategoryOpenable);
 #pragma warning disable CA1422
-                        StartActivityForResult(Intent.CreateChooser(intent, "Foto del código QR"), RequestQrImage);
+                        StartActivityForResult(Intent.CreateChooser(intent, T("Photo of the QR code")), RequestQrImage);
 #pragma warning restore CA1422
                         break;
                     case 1: AskViewerUrl(); break;
@@ -300,16 +315,16 @@ public class MainActivity : Activity
         var input = new EditText(this) { Hint = "https://google.com/cardboard/cfg?p=…" };
         input.SetSingleLine(true);
         new AlertDialog.Builder(this)
-            .SetTitle("Dirección del código QR")!
+            .SetTitle(T("QR code address"))!
             .SetView(input)!
-            .SetPositiveButton("Usar", (_, _) => ApplyViewerUrl(input.Text ?? ""))!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetPositiveButton(T("Use"), (_, _) => ApplyViewerUrl(input.Text ?? ""))!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 
     private void ReadQrImage(Uri image)
     {
-        Toast.MakeText(this, "Leyendo el código…", ToastLength.Short)!.Show();
+        Toast.MakeText(this, T("Reading the code…"), ToastLength.Short)!.Show();
         Task.Run(() =>
         {
             string? text = null;
@@ -332,7 +347,7 @@ public class MainActivity : Activity
             catch (Exception ex) when (ex is Java.Lang.Exception or IOException) { }
             RunOnUiThread(() =>
             {
-                if (text is null) Toast.MakeText(this, "No se encontró un código QR en la foto", ToastLength.Long)!.Show();
+                if (text is null) Toast.MakeText(this, T("No QR code found in the photo"), ToastLength.Long)!.Show();
                 else ApplyViewerUrl(text);
             });
         });
@@ -359,7 +374,7 @@ public class MainActivity : Activity
             {
                 if (profile is null)
                 {
-                    Toast.MakeText(this, "Ese código no es de un visor Cardboard (o el enlace corto ya no funciona)", ToastLength.Long)!.Show();
+                    Toast.MakeText(this, T("That code is not from a Cardboard viewer (or the short link no longer works)"), ToastLength.Long)!.Show();
                     return;
                 }
                 var m = Resources!.DisplayMetrics!;
@@ -370,7 +385,7 @@ public class MainActivity : Activity
                 _settings.Fov = Math.Clamp(MathF.Round(fov), 40f, 130f);
                 _settings.IpdShift = Math.Clamp(MathF.Round(ipd, 2), -0.3f, 0.3f);
                 UpdateToggleLabels();
-                Toast.MakeText(this, $"Visor configurado: {profile.Vendor} {profile.Model}", ToastLength.Long)!.Show();
+                Toast.MakeText(this, F("Viewer set up: {0} {1}", profile.Vendor, profile.Model), ToastLength.Long)!.Show();
             });
         });
     }
@@ -396,7 +411,7 @@ public class MainActivity : Activity
         if (uri is null) return;
         int idx = _items.FindIndex(i => i.Location == uri);
         if (idx >= 0) { Play(idx); return; }
-        var single = new List<MediaItem> { new(uri, _settings.LastVideoName ?? "vídeo") };
+        var single = new List<MediaItem> { new(uri, _settings.LastVideoName ?? T("video")) };
         StartActivity(PlayerActivity.CreateIntent(this, single, 0));
     }
 }
@@ -447,11 +462,11 @@ internal sealed class VideoListAdapter : BaseAdapter<MediaItem>
         var state = _store.Get(item);
         var choice = FormatResolver.Resolve(new FormatInputs(state.FormatOverride, state.Profile, _store.GetFolder(item),
             _store.Profiles(item), item.Name, 0, 0, null));
-        string formatText = choice.Source == FormatSource.Auto ? "formato automático" : $"{choice.Format.Label} ({choice.Note})";
+        string formatText = choice.Source == FormatSource.Auto ? T("automatic format") : $"{choice.Format.Label} ({choice.Note})";
         var parts = new List<string> { formatText };
         if (item.SizeBytes > 0) parts.Add($"{item.SizeBytes / (1024.0 * 1024.0):0} MB");
-        if (state.PositionMs > 0) parts.Add("continuar en " + MediaUtil.FormatTime(state.PositionMs));
-        if (state.Spots.Count > 0) parts.Add(state.Spots.Count == 1 ? "1 marca" : $"{state.Spots.Count} marcas");
+        if (state.PositionMs > 0) parts.Add(F("continue at {0}", MediaUtil.FormatTime(state.PositionMs)));
+        if (state.Spots.Count > 0) parts.Add(BookmarkCount(state.Spots.Count));
         title.Text = item.Name;
         detail.Text = string.Join(" · ", parts);
         return row;

@@ -77,9 +77,9 @@ internal sealed class VideoStore(Context context, AppSettings settings)
     /// <summary>Where this video's settings are kept, for the Info window.</summary>
     public string StorageText(MediaItem item) => File(item) switch
     {
-        { CanWrite: true } => $"{FolderSettings.FileName} en la carpeta elegida",
-        { } => "ajustes de la app (la carpeta es de solo lectura: vuelve a elegirla)",
-        _ => "ajustes de la app (video abierto fuera de una carpeta)",
+        { CanWrite: true } => F("{0} in the chosen folder", FolderSettings.FileName),
+        { } => T("app settings (the folder is read-only: choose it again)"),
+        _ => T("app settings (video opened outside a folder)"),
     };
 
     /// <summary>True when the item's folder can only be read (settings then stay in the app).</summary>

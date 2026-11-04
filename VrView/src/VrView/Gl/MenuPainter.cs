@@ -280,7 +280,7 @@ internal sealed class MenuPainter : IDisposable
             _text.TextAlign = Paint.Align.Center;
             _text.TextSize = 0.03f * px;
             _text.Color = DimText;
-            c.DrawText("Cargando cuadro…", r.CenterX(), r.CenterY(), _text);
+            c.DrawText(T("Loading frame…"), r.CenterX(), r.CenterY(), _text);
         }
         using var guide = new Paint { AntiAlias = true, Color = Color.Argb(220, 255, 202, 40), StrokeWidth = Math.Max(2, 0.003f * px) };
         guide.SetStyle(Paint.Style.Stroke);
@@ -401,8 +401,8 @@ internal sealed class MenuPainter : IDisposable
         c.DrawLine(w / 2f + 60, h / 2f, w, h / 2f, line);
         using var text = new Paint { AntiAlias = true, Color = Color.White, TextAlign = Paint.Align.Center, TextSize = 26 };
         text.SetShadowLayer(6, 0, 0, Color.Black);
-        c.DrawText("Inclina la cabeza hasta que esta línea quede sobre el horizonte del video", w / 2f, h / 2f - 40, text);
-        c.DrawText("y quédate quieto · toca la pantalla para cancelar", w / 2f, h / 2f + 66, text);
+        c.DrawText(T("Tilt your head until this line sits on the video's horizon"), w / 2f, h / 2f - 40, text);
+        c.DrawText(T("and hold still · tap the screen to cancel"), w / 2f, h / 2f + 66, text);
         return bmp;
     }
 
@@ -421,7 +421,7 @@ internal sealed class MenuPainter : IDisposable
         c.DrawText(next ? "▶|" : "|◀", size / 2f, size / 2f + 20, text);
         text.TextSize = 30;
         text.FakeBoldText = false;
-        c.DrawText(next ? "Siguiente" : "Anterior", size / 2f, size / 2f + 74, text);
+        c.DrawText(next ? T("Next") : T("Previous"), size / 2f, size / 2f + 74, text);
         return bmp;
     }
 

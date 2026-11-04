@@ -1,0 +1,37 @@
+VrView macht aus deinem Handy und einer einfachen VR-Brille ein privates Kino für die Videos, die du schon hast. Wähle einen Ordner und er wird zur Wiedergabeliste: Handy in die Brille stecken und losschauen, ohne Konto und ohne Werbung.
+
+VrView ist kostenlos und komplett freigeschaltet. Alle Funktionen sind enthalten. Wenn dir die App gefällt, kannst du mir über eine freiwillige Einmalzahlung ein Bier spendieren.
+
+ORDNER-PLAYLISTS
+• Beliebigen Ordner wählen, mit oder ohne Unterordner, und in natürlicher Reihenfolge abspielen
+• Zufallswiedergabe, alle wiederholen oder eins wiederholen
+• Eine Mediathek in der Brille mit Vorschaubildern, Filtern und Sortierung, damit du das Video wechseln kannst, ohne sie abzusetzen
+• Macht dort weiter, wo du aufgehört hast, Video für Video
+
+DIE FORMATE, DIE DU WIRKLICH NUTZT
+• Flach, 180°, 360°, Fischauge, EAC-Cubemap, 3×2-Cubemap und das eingebettete Mesh von VR180-Kameras
+• Mono, nebeneinander, übereinander und vertauschte Augen
+• Automatische Erkennung über die VR-Metadaten der Datei, Tags im Namen (wie _180_LR) oder ihr Seitenverhältnis
+• Ein vollständiger Format-Editor für Kameras außerhalb der Norm: Abdeckung, Objektivwinkel, Kreismitte und Kreisgröße
+• Speichere ein Format als Profil und nutze es für einen ganzen Ordner
+
+GEMACHT FÜR HANDY-VR-BRILLEN
+• Anti-Drift-Tracking, damit das Bild vor dir bleibt
+• Scanne den QR-Code deiner Brille, um ihre Linsen zu laden, oder nutze den Kalibrierungsassistenten in 3 Schritten
+• Korrektur der Linsenverzeichnung und einstellbarer Linsenabstand
+• Schau eine Taste an, um sie zu drücken, oder nutze die Brillentaste, einen Bluetooth-Controller oder eine Tastatur
+• Richte den Horizont eines schiefen Videos mit dem Kopf aus
+
+AUSSERDEM
+• Marken mit Vorschaubildern und Namen
+• Auswahl von Tonspur und Untertiteln, auch .srt-Dateien neben dem Video
+• Technische Infos: Codec, Auflösung, Bildrate und Hardware- oder Software-Decodierung
+• Bildschirmansicht ohne Brille: ziehen zum Umsehen, zusammenziehen zum Zoomen
+• Erscheint unter „Öffnen mit“ in Galerien und Dateimanagern
+• Verfügbar auf Deutsch, Englisch, Spanisch und Französisch
+
+DEINE VIDEOS BLEIBEN DEINE
+VrView braucht keine Speicherberechtigung: Du gibst nur die Ordner frei, die du auswählst. Keine Konten, keine Werbung, keine Analysen. Deine Einstellungen liegen auf deinem Gerät, in einer kleinen Datei vrview.json in jedem Ordner, und bleiben so auch nach einer Neuinstallation erhalten.
+
+GUT ZU WISSEN
+VrView spielt Videodateien ab, die auf deinem Gerät gespeichert sind; die App enthält weder Videos noch einen Streamingdienst. Welche Auflösungen flüssig laufen, hängt vom Videodecoder deines Handys ab. Für das Head-Tracking ist ein Gyroskop nötig; ohne Gyroskop ziehst du mit dem Finger, um dich umzusehen. Erfordert Android 8.0 oder höher.

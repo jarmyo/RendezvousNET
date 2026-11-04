@@ -12,4 +12,7 @@
     <!-- QR decoding of Cardboard viewer codes (see QrDecoder.cs). -->
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="VrView.Core.Loc" Static="true" />
+  </ItemGroup>
 </Project>

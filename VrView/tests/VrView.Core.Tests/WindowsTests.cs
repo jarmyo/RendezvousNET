@@ -95,12 +95,12 @@ public class WindowsTests
         Assert.False(w.Find(MenuAction.ParamSet, (int)Param.Nadir)!.Enabled);
         Assert.False(w.Find(MenuAction.NadirToggle)!.Active);
         Assert.True(w.Find(MenuAction.FormatProjection, (int)Projection.Dome180)!.Active);
-        Assert.Contains("estándar", w.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
+        Assert.Contains("standard", w.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
 
         var tuned = Windows.Build(State(WindowKind.Format, f: new VideoFormat(Projection.Dome180, StereoMode.SideBySide, VFov: 150, NadirDeg: 30)));
         Assert.True(tuned.Find(MenuAction.ParamSet, (int)Param.Nadir)!.Enabled);
         Assert.True(tuned.Find(MenuAction.NadirToggle)!.Active);
-        Assert.Contains("cambiado", tuned.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
+        Assert.Contains("changed", tuned.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class FormatResolverTests
         var fromFolder = R("a.mp4", folder: folder, meta: mono360);
         Assert.Equal(FormatSource.FolderProfile, fromFolder.Source);
         Assert.Equal(200f, fromFolder.Format.HFov);
-        Assert.Equal("perfil Cámara 200°", fromFolder.Note);
+        Assert.Equal("profile Cámara 200°", fromFolder.Note);
         Assert.Equal(FormatScope.Profile, fromFolder.DefaultScope);
         // Tags in the name win over the folder.
         Assert.Equal(FormatSource.NameTags, R("a_360_TB.mp4", folder: folder).Source);
@@ -201,7 +201,7 @@ public class FormatResolverTests
         var c = R("a_180_LR.mp4", folder: new FolderEntry { Format = new VideoFormat(Projection.Sphere360, StereoMode.Mono) });
         Assert.Equal(5, c.Candidates.Count);
         Assert.Single(c.Candidates, x => x.Used);
-        Assert.Contains(c.Candidates, x => x.Text.Contains("no se aplica"));
+        Assert.Contains(c.Candidates, x => x.Text.Contains("does not apply"));
         Assert.Equal("2:1", FormatResolver.AspectText(3840, 1920));
         Assert.Equal("16:9", FormatResolver.AspectText(1920, 1080));
     }

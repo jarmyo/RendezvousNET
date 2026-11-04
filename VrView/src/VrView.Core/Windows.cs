@@ -10,8 +10,8 @@ namespace VrView.Core;
 public static class Windows
 {
     public const float HeaderMeters = 0.14f;
-    public static readonly string[] SettingsTabs = ["Visor", "Controles", "Seguimiento", "Calidad", "Datos"];
-    public static readonly string[] LensLevels = ["No", "Suave", "Fuerte", "Perfil QR"];
+    public static string[] SettingsTabs => [T("Viewer"), T("Controls"), T("Tracking"), T("Quality"), T("Data")];
+    public static string[] LensLevels => [T("None"), T("Mild"), T("Strong"), T("QR profile")];
 
     public static UiWindow Build(UiState s) => s.Window switch
     {
@@ -58,19 +58,19 @@ public static class Windows
             },
         };
         e.AddRange(Row(0.41f, 0.65f, 0.03f, 0.97f,
-            Btn(MenuAction.Prev, "|◀ Anterior"), Btn(MenuAction.Back10, "◀◀ 10 s", repeat: true),
-            Btn(MenuAction.PlayPause, p.Playing ? "II Pausa" : "▶ Reproducir"), Btn(MenuAction.Fwd10, "10 s ▶▶", repeat: true),
-            Btn(MenuAction.Next, "Siguiente ▶|"), Btn(MenuAction.SpotAdd, "＋ Marca"),
+            Btn(MenuAction.Prev, T("|◀ Previous")), Btn(MenuAction.Back10, "◀◀ 10 s", repeat: true),
+            Btn(MenuAction.PlayPause, p.Playing ? T("II Pause") : T("▶ Play")), Btn(MenuAction.Fwd10, "10 s ▶▶", repeat: true),
+            Btn(MenuAction.Next, T("Next ▶|")), Btn(MenuAction.SpotAdd, T("＋ Bookmark")),
             Btn(MenuAction.VolDown, "Vol −", repeat: true), Btn(MenuAction.VolUp, "Vol +", repeat: true)));
         e.AddRange(Row(0.71f, 0.95f, 0.03f, 0.97f,
-            Open(WindowKind.Spots, s.Spots.Spots.Length > 0 ? $"Marcas ({s.Spots.Spots.Length})" : "Marcas"),
-            Open(WindowKind.Format, "Formato"), Open(WindowKind.Horizon, "Horizonte"), Open(WindowKind.Tracks, "Audio y subt."),
-            Open(WindowKind.Info, "Info"), Open(WindowKind.Library, "Biblioteca"), Open(WindowKind.Settings, "⚙ Ajustes"),
-            Btn(MenuAction.Exit, "Salir")));
+            Open(WindowKind.Spots, s.Spots.Spots.Length > 0 ? F("Bookmarks ({0})", s.Spots.Spots.Length) : T("Bookmarks")),
+            Open(WindowKind.Format, T("Format")), Open(WindowKind.Horizon, T("Horizon")), Open(WindowKind.Tracks, T("Audio & subs")),
+            Open(WindowKind.Info, T("Info")), Open(WindowKind.Library, T("Library")), Open(WindowKind.Settings, T("⚙ Settings")),
+            Btn(MenuAction.Exit, T("Exit"))));
         e.Add(Close(aspect, width));
         string fps = s.Settings.ShowFps && p.Fps > 0 ? $"   ·   {p.Fps:0.#} fps" : "";
         string subtitle = $"{MediaUtil.FormatTime(p.PositionMs)} / {MediaUtil.FormatTime(p.DurationMs)}   ·   {p.FormatText}   ·   " +
-                          $"{p.SensorText}   ·   Vol {p.VolumePercent}%   ·   {p.Index + 1} de {p.Count}{fps}";
+                          $"{p.SensorText}   ·   Vol {p.VolumePercent}%   ·   {F("{0} of {1}", p.Index + 1, p.Count)}{fps}";
         return new UiWindow(WindowKind.Player, p.Title, subtitle, aspect, e) { Width = width };
     }
 
@@ -86,8 +86,8 @@ public static class Windows
         var e = new List<UiElement>();
 
         // Left column: raw frame, origin, optional corrections.
-        e.Add(new UiElement(UiKind.Preview, MenuAction.None, new UiRect(0.02f, 0.11f, 0.37f, 0.43f)) { Text = "Archivo original" });
-        e.Add(Section("¿De dónde sale este formato?", 0.02f, 0.445f, 0.37f));
+        e.Add(new UiElement(UiKind.Preview, MenuAction.None, new UiRect(0.02f, 0.11f, 0.37f, 0.43f)) { Text = T("Original file") });
+        e.Add(Section(T("Where does this format come from?"), 0.02f, 0.445f, 0.37f));
         float y = 0.49f;
         foreach (var c in m.Choice.Candidates)
         {
@@ -97,60 +97,60 @@ public static class Windows
             });
             y += 0.044f;
         }
-        e.Add(Section("Correcciones opcionales", 0.02f, 0.72f, 0.37f));
+        e.Add(Section(T("Optional corrections"), 0.02f, 0.72f, 0.37f));
         e.Add(new UiElement(UiKind.Toggle, MenuAction.NadirToggle, new UiRect(0.02f, 0.76f, 0.37f, 0.825f))
         {
-            Text = "Tapa abajo (nadir)",
-            Detail = f.NadirDeg > 0 ? $"disco oscuro de {f.NadirDeg:0}° bajo tus pies" : "apagada",
+            Text = T("Bottom cover (nadir)"),
+            Detail = f.NadirDeg > 0 ? F("dark {0:0}° disc under your feet", f.NadirDeg) : T("off"),
             Active = f.NadirDeg > 0,
             Enabled = f.Projection != Projection.Flat,
         });
         e.Add(new UiElement(UiKind.Toggle, MenuAction.HorizonToggle, new UiRect(0.02f, 0.835f, 0.25f, 0.9f))
         {
-            Text = "Horizonte de este video",
-            Detail = m.HasHorizon ? $"nivel {Deg(m.Roll)} · inclinación {Deg(m.Pitch)}" : "sin corrección",
+            Text = T("Horizon of this video"),
+            Detail = m.HasHorizon ? F("level {0} · tilt {1}", Deg(m.Roll), Deg(m.Pitch)) : T("no correction"),
             Active = m.HasHorizon,
         });
-        e.Add(Btn(MenuAction.SetHorizon, m.HasHorizon ? "Volver a fijar" : "Fijar con la cabeza")
+        e.Add(Btn(MenuAction.SetHorizon, m.HasHorizon ? T("Set again") : T("Set with your head"))
             .At(new UiRect(0.26f, 0.835f, 0.37f, 0.9f)));
 
         // Right column: projection, eyes, geometry.
-        e.Add(Section("Proyección", 0.40f, 0.11f, 0.98f));
+        e.Add(Section(T("Projection"), 0.40f, 0.11f, 0.98f));
         var projections = new List<Projection> { Projection.Flat, Projection.Dome180, Projection.Sphere360, Projection.Fisheye, Projection.Eac, Projection.Cubemap };
         if (m.HasEmbeddedMesh || f.Projection == Projection.Mesh) projections.Add(Projection.Mesh);
         e.AddRange(Row(0.15f, 0.235f, 0.40f, 0.98f, projections.Select(p => new UiElement(UiKind.Tile, MenuAction.FormatProjection, default)
         {
             Text = p switch
             {
-                Projection.Flat => "Plano", Projection.Dome180 => "180°", Projection.Sphere360 => "360°",
-                Projection.Fisheye => "Ojo de pez", Projection.Eac => "Cubemap EAC", Projection.Cubemap => "Cubemap",
-                _ => "Malla",
+                Projection.Flat => T("Flat"), Projection.Dome180 => "180°", Projection.Sphere360 => "360°",
+                Projection.Fisheye => T("Fisheye"), Projection.Eac => "Cubemap EAC", Projection.Cubemap => "Cubemap",
+                _ => T("Mesh"),
             },
             Detail = p switch
             {
-                Projection.Flat => "pantalla", Projection.Dome180 or Projection.Sphere360 => "equirect.",
-                Projection.Fisheye => "circular", Projection.Eac => "YouTube", Projection.Cubemap => "3×2", _ => "del archivo",
+                Projection.Flat => T("screen"), Projection.Dome180 or Projection.Sphere360 => "equirect.",
+                Projection.Fisheye => T("circular"), Projection.Eac => "YouTube", Projection.Cubemap => "3×2", _ => T("from file"),
             },
             Arg = (int)p,
             Active = f.Projection == p,
         }).ToArray()));
 
-        e.Add(Section("Ojos", 0.40f, 0.25f, 0.98f));
+        e.Add(Section(T("Eyes"), 0.40f, 0.25f, 0.98f));
         e.AddRange(Row(0.29f, 0.36f, 0.40f, 0.76f,
             Tile(MenuAction.FormatEyes, "2D", (int)StereoMode.Mono, f.Stereo == StereoMode.Mono),
-            Tile(MenuAction.FormatEyes, "Lado a lado", (int)StereoMode.SideBySide, f.Stereo == StereoMode.SideBySide),
-            Tile(MenuAction.FormatEyes, "Arriba-abajo", (int)StereoMode.TopBottom, f.Stereo == StereoMode.TopBottom)));
+            Tile(MenuAction.FormatEyes, T("Side by side"), (int)StereoMode.SideBySide, f.Stereo == StereoMode.SideBySide),
+            Tile(MenuAction.FormatEyes, T("Top-bottom"), (int)StereoMode.TopBottom, f.Stereo == StereoMode.TopBottom)));
         e.Add(new UiElement(UiKind.Toggle, MenuAction.FormatSwap, new UiRect(0.775f, 0.29f, 0.98f, 0.36f))
         {
-            Text = "Invertir ojos", Active = f.SwapEyes, Enabled = f.IsStereo,
+            Text = T("Swap eyes"), Active = f.SwapEyes, Enabled = f.IsStereo,
         });
 
-        e.Add(Section("Geometría", 0.40f, 0.38f, 0.98f));
+        e.Add(Section(T("Geometry"), 0.40f, 0.38f, 0.98f));
         y = 0.42f;
         foreach (var p in GeometryParams)
         {
             bool applies = Params.Applies(p, f) && (p != Param.Nadir || f.NadirDeg > 0);
-            string reason = p == Param.Nadir && Params.Applies(p, f) ? "enciende la tapa" : Params.NotApplicableReason(p);
+            string reason = p == Param.Nadir && Params.Applies(p, f) ? T("turn the cover on") : Params.NotApplicableReason(p);
             e.AddRange(SliderRow(p, Params.Spec(p), Params.Get(f, p), Params.Standard(p, f), applies, reason,
                 y, y + 0.06f, 0.40f, 0.98f, Params.IsStandard(f, p), labelWidth: 0.17f));
             y += 0.068f;
@@ -158,31 +158,30 @@ public static class Windows
         if (f.Projection == Projection.Fisheye)
         {
             // The lens type takes the start of the bottom row.
-            e.Add(Btn(MenuAction.FormatLens, "Lente: " + Params.LensLabel(f.Lens))
+            e.Add(Btn(MenuAction.FormatLens, F("Lens: {0}", Params.LensLabel(f.Lens)))
                 .At(new UiRect(0.02f, 0.91f, 0.20f, 0.975f)));
         }
 
         // Bottom: where changes are saved.
-        string profileText = m.FolderProfile is { } fp ? $"Perfil «{fp}»" : "Guardar como perfil";
-        string tagNote = m.HasTags ? " (y este video)" : "";
+        string profileText = m.FolderProfile is { } fp ? F("Profile “{0}”", fp) : T("Save as profile");
         e.AddRange(Row(0.91f, 0.975f, f.Projection == Projection.Fisheye ? 0.22f : 0.02f, 0.66f,
-            Tile(MenuAction.FormatScope, "Solo este video", (int)FormatScope.Video, m.Scope == FormatScope.Video),
-            Tile(MenuAction.FormatScope, "Toda la carpeta" + tagNote, (int)FormatScope.Folder, m.Scope == FormatScope.Folder),
+            Tile(MenuAction.FormatScope, T("This video only"), (int)FormatScope.Video, m.Scope == FormatScope.Video),
+            Tile(MenuAction.FormatScope, m.HasTags ? T("Whole folder (and this video)") : T("Whole folder"), (int)FormatScope.Folder, m.Scope == FormatScope.Folder),
             Tile(MenuAction.FormatScope, profileText, (int)FormatScope.Profile, m.Scope == FormatScope.Profile)));
-        e.Add(Btn(MenuAction.FormatAuto, "Volver a automático").At(new UiRect(0.68f, 0.91f, 0.84f, 0.975f)));
-        e.Add(Btn(MenuAction.Done, "✓ Listo").At(new UiRect(0.855f, 0.91f, 0.98f, 0.975f)));
+        e.Add(Btn(MenuAction.FormatAuto, T("Back to automatic")).At(new UiRect(0.68f, 0.91f, 0.84f, 0.975f)));
+        e.Add(Btn(MenuAction.Done, T("✓ Done")).At(new UiRect(0.855f, 0.91f, 0.98f, 0.975f)));
         e.Add(Close(aspect, width));
 
-        string changed = f.IsTuned ? "cambiado" : "estándar";
-        return new UiWindow(WindowKind.Format, "Formato · " + m.FileName,
-            $"{f.ShortLabel} · {changed} · se guarda en: {ScopeText(m)}", aspect, e) { Width = width };
+        string changed = f.IsTuned ? T("changed") : T("standard");
+        return new UiWindow(WindowKind.Format, F("Format · {0}", m.FileName),
+            F("{0} · {1} · saved to: {2}", f.ShortLabel, changed, ScopeText(m)), aspect, e) { Width = width };
     }
 
     private static string ScopeText(FormatEditorModel m) => m.Scope switch
     {
-        FormatScope.Folder => "la carpeta",
-        FormatScope.Profile => m.FolderProfile is { } p ? $"el perfil «{p}»" : "un perfil nuevo",
-        _ => "este video",
+        FormatScope.Folder => T("the folder"),
+        FormatScope.Profile => m.FolderProfile is { } p ? F("the profile “{0}”", p) : T("a new profile"),
+        _ => T("this video"),
     };
 
     // ---- Spots ----
@@ -207,17 +206,17 @@ public static class Windows
             });
         }
         e.AddRange(Row(0.71f, 0.95f, 0.03f, 0.97f,
-            Btn(MenuAction.SpotPrev, "◀ Marca"), Btn(MenuAction.SpotAdd, "＋ Marca"), Btn(MenuAction.SpotNext, "Marca ▶"),
-            Btn(MenuAction.SpotPagePrev, "◀ Pág.") with { Enabled = m.Page > 0 },
-            Btn(MenuAction.SpotPageNext, "Pág. ▶") with { Enabled = m.Page < m.PageCount - 1 },
-            Tile(MenuAction.SpotDeleteMode, m.DeleteMode ? "Borrar: sí" : "Borrar: no", 0, m.DeleteMode) with { Danger = m.DeleteMode },
-            Btn(MenuAction.Back, "Volver")));
+            Btn(MenuAction.SpotPrev, T("◀ Bookmark")), Btn(MenuAction.SpotAdd, T("＋ Bookmark")), Btn(MenuAction.SpotNext, T("Bookmark ▶")),
+            Btn(MenuAction.SpotPagePrev, T("◀ Page")) with { Enabled = m.Page > 0 },
+            Btn(MenuAction.SpotPageNext, T("Page ▶")) with { Enabled = m.Page < m.PageCount - 1 },
+            Tile(MenuAction.SpotDeleteMode, m.DeleteMode ? T("Delete: on") : T("Delete: off"), 0, m.DeleteMode) with { Danger = m.DeleteMode },
+            Btn(MenuAction.Back, T("Back"))));
         e.Add(Close(aspect, width));
         string sub = m.Spots.Length == 0
-            ? "Aún no hay: pulsa «＋ Marca» para guardar el momento actual"
-            : $"{m.Spots.Length} marcas · página {m.Page + 1} de {m.PageCount}" +
-              (m.DeleteMode ? " · mira una marca para BORRARLA" : " · mira una marca para saltar a ella");
-        return new UiWindow(WindowKind.Spots, "Marcas · " + s.Player.Title, sub, aspect, e) { Width = width };
+            ? T("None yet: press “＋ Bookmark” to save the current moment")
+            : F("{0} · page {1} of {2}", BookmarkCount(m.Spots.Length), m.Page + 1, m.PageCount) + " · " +
+              (m.DeleteMode ? T("look at a bookmark to DELETE it") : T("look at a bookmark to jump to it"));
+        return new UiWindow(WindowKind.Spots, F("Bookmarks · {0}", s.Player.Title), sub, aspect, e) { Width = width };
     }
 
     // ---- Info ----
@@ -233,10 +232,10 @@ public static class Windows
             float y = top + i / 2 * h;
             e.Add(new UiElement(UiKind.Info, MenuAction.None, new UiRect(0.04f, y, 0.96f, y + h)) { Text = s.Info[i], Detail = s.Info[i + 1] });
         }
-        e.Add(Btn(MenuAction.Back, "Volver").At(new UiRect(0.04f, 0.89f, 0.30f, 0.97f)));
-        e.Add(Btn(MenuAction.Open, "Editar formato", (int)WindowKind.Format).At(new UiRect(0.32f, 0.89f, 0.58f, 0.97f)));
+        e.Add(Btn(MenuAction.Back, T("Back")).At(new UiRect(0.04f, 0.89f, 0.30f, 0.97f)));
+        e.Add(Btn(MenuAction.Open, T("Edit format"), (int)WindowKind.Format).At(new UiRect(0.32f, 0.89f, 0.58f, 0.97f)));
         e.Add(Close(aspect, width));
-        return new UiWindow(WindowKind.Info, "Información", s.Player.Title, aspect, e) { Width = width };
+        return new UiWindow(WindowKind.Info, T("Information"), s.Player.Title, aspect, e) { Width = width };
     }
 
     // ---- Settings ----
@@ -252,79 +251,79 @@ public static class Windows
         switch (s.Tab)
         {
             case 0:
-                rows.Tiles("Vista", MenuAction.StereoView, v.StereoView ? 0 : 1, "Visor VR", "Pantalla (sin visor)");
+                rows.Tiles(T("View"), MenuAction.StereoView, v.StereoView ? 0 : 1, T("VR viewer"), T("Screen (no viewer)"));
                 rows.Slider(Param.Ipd, v.IpdShift * 100);
                 rows.Slider(Param.Zoom, v.Fov);
-                rows.Tiles("Distorsión de las lentes", MenuAction.LensLevel, v.LensLevel, LensLevels, enabled: i => i < 3 || v.ViewerName is not null);
-                rows.Text("Perfil del visor", v.ViewerName is { } vn ? $"{vn} (escaneado del código QR)" : "ninguno · se escanea en la lista de videos: «Visor: escanear su código QR»",
-                    v.ViewerName is not null ? Btn(MenuAction.ViewerReset, "Quitar perfil") : null);
-                rows.Button(Btn(MenuAction.Open, "Asistente de calibración…", (int)WindowKind.Calibration),
-                    "alinear lentes, menú y distorsión en 3 pasos");
+                rows.Tiles(T("Lens distortion"), MenuAction.LensLevel, v.LensLevel, LensLevels, enabled: i => i < 3 || v.ViewerName is not null);
+                rows.Text(T("Viewer profile"), v.ViewerName is { } vn ? F("{0} (scanned from the QR code)", vn) : T("none · scan it from the video list: “Viewer: scan its QR code”"),
+                    v.ViewerName is not null ? Btn(MenuAction.ViewerReset, T("Remove profile")) : null);
+                rows.Button(Btn(MenuAction.Open, T("Calibration wizard…"), (int)WindowKind.Calibration),
+                    T("align lenses, menu and distortion in 3 steps"));
                 break;
             case 1:
-                rows.Tiles("Tamaño", MenuAction.ControlsSize, v.ControlsSize, "Chicos", "Medianos", "Grandes");
+                rows.Tiles(T("Size"), MenuAction.ControlsSize, v.ControlsSize, T("Small"), T("Medium"), T("Large"));
                 rows.Slider(Param.Opacity, v.Opacity * 100);
                 rows.Slider(Param.MenuShift, v.MenuShift * 100);
-                rows.Toggle("Clic con la mirada", MenuAction.GazeClick, v.GazeClick, "mirar un botón un momento lo pulsa");
+                rows.Toggle(T("Gaze click"), MenuAction.GazeClick, v.GazeClick, T("look at a button for a moment to press it"));
                 rows.Slider(Param.DwellTime, v.DwellSeconds, enabled: v.GazeClick);
-                rows.Toggle("Botones ◀ ▶ a los lados", MenuAction.EdgeButtons, v.EdgeButtonsOn, "anterior y siguiente siempre visibles");
-                rows.Tiles("Los botones ◀ ▶", MenuAction.EdgeFollowHead, v.EdgeFollowHead ? 1 : 0, ["Fijos en la escena", "Siguen la cabeza"], enabled: _ => v.EdgeButtonsOn);
+                rows.Toggle(T("◀ ▶ buttons at the sides"), MenuAction.EdgeButtons, v.EdgeButtonsOn, T("previous and next always visible"));
+                rows.Tiles(T("The ◀ ▶ buttons"), MenuAction.EdgeFollowHead, v.EdgeFollowHead ? 1 : 0, [T("Fixed in the scene"), T("Follow your head")], enabled: _ => v.EdgeButtonsOn);
                 rows.Slider(Param.EdgeAngle, v.EdgeButtonsAngle, enabled: v.EdgeButtonsOn && !v.EdgeFollowHead);
                 break;
             case 2:
-                rows.Tiles("Modo del sensor", MenuAction.TrackingMode, (int)v.Tracking,
-                    ["Anti-deriva (recomendado)", "Solo giroscopio", "Brújula"],
+                rows.Tiles(T("Sensor mode"), MenuAction.TrackingMode, (int)v.Tracking,
+                    [T("Anti-drift (recommended)"), T("Gyroscope only"), T("Compass")],
                     enabled: i => i == 1 || s.Tracking.HasCompass);
-                rows.Text("Qué hace cada modo", v.Tracking switch
+                rows.Text(T("What each mode does"), v.Tracking switch
                 {
-                    TrackingMode.AntiDrift => "giroscopio para moverse suave + brújula, muy despacio, para no desviarse",
-                    TrackingMode.GyroOnly => "el más suave; se desvía con el tiempo (se resta el error medido en reposo)",
-                    _ => "nunca se desvía; puede temblar cerca de metal o imanes",
+                    TrackingMode.AntiDrift => T("gyroscope for smooth motion + compass, very slowly, to stop drifting"),
+                    TrackingMode.GyroOnly => T("the smoothest; drifts over time (the error measured at rest is subtracted)"),
+                    _ => T("never drifts; may shake near metal or magnets"),
                 });
-                rows.Text("Estado", TrackingText(s.Tracking));
+                rows.Text(T("Status"), TrackingText(s.Tracking));
                 rows.Button(Btn(MenuAction.Calibrate, s.Tracking.Calibrating
-                        ? $"Calibrando… {s.Tracking.CalibrationProgress * 100:0} %" : "Calibrar (dejar quieto 5 s)"),
-                    "pon el teléfono sobre la mesa; mide el error del giroscopio");
-                rows.Toggle("Recentrar al empezar cada video", MenuAction.AutoRecenter, v.AutoRecenter, "el frente del video queda donde miras");
-                rows.Button(Btn(MenuAction.Recenter, "Recentrar ahora"), "también: botón Y del control o tecla R");
+                        ? F("Calibrating… {0:0} %", s.Tracking.CalibrationProgress * 100) : T("Calibrate (keep still for 5 s)")),
+                    T("put the phone on a table; measures the gyroscope error"));
+                rows.Toggle(T("Recenter when each video starts"), MenuAction.AutoRecenter, v.AutoRecenter, T("the front of the video lands where you are looking"));
+                rows.Button(Btn(MenuAction.Recenter, T("Recenter now")), T("also: Y on the gamepad or the R key"));
                 break;
             case 3:
-                rows.Tiles("Calidad de imagen", MenuAction.Quality, v.HighQuality ? 0 : 1, "Alta (bordes suaves)", "Normal (menos batería)");
-                rows.Tiles("Densidad de la malla", MenuAction.MeshDetail, v.DenseMesh ? 1 : 0, "Normal", "Densa (líneas más rectas)");
-                rows.Toggle("Mostrar cuadros por segundo", MenuAction.ShowFps, v.ShowFps, "en la barra del reproductor");
+                rows.Tiles(T("Image quality"), MenuAction.Quality, v.HighQuality ? 0 : 1, T("High (smooth edges)"), T("Normal (less battery)"));
+                rows.Tiles(T("Mesh density"), MenuAction.MeshDetail, v.DenseMesh ? 1 : 0, T("Normal"), T("Dense (straighter lines)"));
+                rows.Toggle(T("Show frames per second"), MenuAction.ShowFps, v.ShowFps, T("in the player bar"));
                 break;
             default:
-                rows.Text("Guardado en", s.Storage);
+                rows.Text(T("Saved in"), s.Storage);
                 if (s.Profiles.Length == 0)
-                    rows.Text("Perfiles de formato", "aún no hay · en el editor de formato: «Guardar como perfil»");
+                    rows.Text(T("Format profiles"), T("none yet · in the format editor: “Save as profile”"));
                 for (int i = 0; i < Math.Min(4, s.Profiles.Length); i++)
-                    rows.Text(i == 0 ? "Perfiles de formato" : "", s.Profiles[i],
-                        Btn(MenuAction.ProfileUse, "Usar en carpeta", i), Btn(MenuAction.ProfileDelete, "Borrar", i) with { Danger = true });
-                rows.Text("Limpiar", "", Btn(MenuAction.ClearVideo, "Datos de este video") with { Danger = true },
-                    Btn(MenuAction.ClearFolder, "Formato de la carpeta") with { Danger = true });
+                    rows.Text(i == 0 ? T("Format profiles") : "", s.Profiles[i],
+                        Btn(MenuAction.ProfileUse, T("Use in folder"), i), Btn(MenuAction.ProfileDelete, T("Delete"), i) with { Danger = true });
+                rows.Text(T("Clean up"), "", Btn(MenuAction.ClearVideo, T("This video's data")) with { Danger = true },
+                    Btn(MenuAction.ClearFolder, T("Folder format")) with { Danger = true });
                 break;
         }
         e.Add(Close(aspect, width));
-        return new UiWindow(WindowKind.Settings, "Ajustes", SettingsTabs[Math.Clamp(s.Tab, 0, SettingsTabs.Length - 1)] +
-            " · los cambios se guardan solos", aspect, e) { Width = width };
+        var tabs = SettingsTabs;
+        return new UiWindow(WindowKind.Settings, T("Settings"), F("{0} · changes are saved automatically", tabs[Math.Clamp(s.Tab, 0, tabs.Length - 1)]), aspect, e) { Width = width };
     }
 
     public static string TrackingText(TrackingStatus t)
     {
         string drift = t.DriftMeasured
-            ? $"{MathF.Abs(t.DriftDegPerMin).ToString("0.0", CultureInfo.InvariantCulture)}° por minuto de desvío medido"
-            : "midiendo el desvío…";
-        string compass = !t.HasCompass ? "sin brújula" : t.CompassOk ? "brújula: bien" : "brújula: perturbada (pausada)";
-        string bias = t.BiasDegPerMin != 0 ? $" · error en reposo {MathF.Abs(t.BiasDegPerMin).ToString("0.0", CultureInfo.InvariantCulture)}°/min" : "";
+            ? F("{0}° per minute of measured drift", MathF.Abs(t.DriftDegPerMin).ToString("0.0", CultureInfo.InvariantCulture))
+            : T("measuring drift…");
+        string compass = !t.HasCompass ? T("no compass") : t.CompassOk ? T("compass: good") : T("compass: disturbed (paused)");
+        string bias = t.BiasDegPerMin != 0 ? " · " + F("error at rest {0}°/min", MathF.Abs(t.BiasDegPerMin).ToString("0.0", CultureInfo.InvariantCulture)) : "";
         return t.Mode == TrackingMode.Compass ? compass : $"{drift} · {compass}{bias}";
     }
 
     /// <summary>Short sensor status for the player's status line.</summary>
     public static string SensorChip(TrackingStatus t) => t.Mode switch
     {
-        TrackingMode.AntiDrift => t.CompassOk ? "Sensor: anti-deriva ✓" : t.HasCompass ? "Sensor: anti-deriva (brújula en pausa)" : "Sensor: giroscopio",
-        TrackingMode.GyroOnly => "Sensor: giroscopio",
-        _ => "Sensor: brújula",
+        TrackingMode.AntiDrift => t.CompassOk ? T("Sensor: anti-drift ✓") : t.HasCompass ? T("Sensor: anti-drift (compass paused)") : T("Sensor: gyroscope"),
+        TrackingMode.GyroOnly => T("Sensor: gyroscope"),
+        _ => T("Sensor: compass"),
     };
 
     private sealed class SettingsRows(List<UiElement> e)
@@ -391,9 +390,9 @@ public static class Windows
         var m = s.Library;
         var e = new List<UiElement>
         {
-            Btn(MenuAction.LibraryContinue, m.ContinueName is { } c ? "▶ Continuar: " + c : "▶ Continuar")
+            Btn(MenuAction.LibraryContinue, m.ContinueName is { } c ? F("▶ Continue: {0}", c) : T("▶ Continue"))
                 .At(new UiRect(0.02f, 0.12f, 0.24f, 0.2f)) with { Enabled = m.ContinueName is not null },
-            Section("Carpetas", 0.02f, 0.22f, 0.24f),
+            Section(T("Folders"), 0.02f, 0.22f, 0.24f),
         };
         float y = 0.26f;
         for (int i = 0; i < Math.Min(6, m.Folders.Length); i++)
@@ -402,12 +401,12 @@ public static class Windows
             y += 0.075f;
         }
         if (m.Folders.Length == 0)
-            e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.02f, y, 0.24f, y + 0.065f)) { Detail = "Elige carpetas en la lista (fuera del visor)" });
-        e.Add(new UiElement(UiKind.Toggle, MenuAction.Shuffle, new UiRect(0.02f, 0.8f, 0.24f, 0.88f)) { Text = "Aleatorio", Active = m.Shuffle });
+            e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.02f, y, 0.24f, y + 0.065f)) { Detail = T("Choose folders in the list (outside the viewer)") });
+        e.Add(new UiElement(UiKind.Toggle, MenuAction.Shuffle, new UiRect(0.02f, 0.8f, 0.24f, 0.88f)) { Text = T("Shuffle"), Active = m.Shuffle });
         e.Add(Btn(MenuAction.Repeat, Playlist.RepeatLabel(m.Repeat)).At(new UiRect(0.02f, 0.895f, 0.24f, 0.975f)));
 
         e.AddRange(Row(0.12f, 0.19f, 0.26f, 0.78f, LibraryModel.FilterLabels.Select((l, i) => Tile(MenuAction.LibraryFilter, l, i, i == m.Filter)).ToArray()));
-        e.Add(Btn(MenuAction.LibrarySort, "Orden: " + LibraryModel.SortLabels[Math.Clamp(m.Sort, 0, 2)]).At(new UiRect(0.8f, 0.12f, 0.98f, 0.19f)));
+        e.Add(Btn(MenuAction.LibrarySort, F("Sort: {0}", LibraryModel.SortLabels[Math.Clamp(m.Sort, 0, 2)])).At(new UiRect(0.8f, 0.12f, 0.98f, 0.19f)));
 
         const float gx = 0.26f, gr = 0.98f, gap = 0.012f, gy0 = 0.215f, gy1 = 0.885f;
         float cw = (gr - gx - gap * 3) / 4, ch = (gy1 - gy0 - gap) / 2;
@@ -422,14 +421,14 @@ public static class Windows
         }
         if (m.Items.Length == 0)
             e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(gx, 0.45f, gr, 0.55f))
-            { Detail = m.Loading ? "Buscando videos…" : "No hay videos con este filtro" });
-        e.Add(Btn(MenuAction.LibraryPagePrev, "◀ Página").At(new UiRect(0.26f, 0.905f, 0.44f, 0.975f)) with { Enabled = m.Page > 0 });
-        e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.45f, 0.905f, 0.79f, 0.975f)) { Detail = $"página {m.Page + 1} de {m.PageCount} · {m.Total} videos" });
-        e.Add(Btn(MenuAction.LibraryPageNext, "Página ▶").At(new UiRect(0.8f, 0.905f, 0.98f, 0.975f)) with { Enabled = m.Page < m.PageCount - 1 });
+            { Detail = m.Loading ? T("Searching for videos…") : T("No videos match this filter") });
+        e.Add(Btn(MenuAction.LibraryPagePrev, T("◀ Page")).At(new UiRect(0.26f, 0.905f, 0.44f, 0.975f)) with { Enabled = m.Page > 0 });
+        e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.45f, 0.905f, 0.79f, 0.975f)) { Detail = F("page {0} of {1} · {2}", m.Page + 1, m.PageCount, VideoCount(m.Total)) });
+        e.Add(Btn(MenuAction.LibraryPageNext, T("Page ▶")).At(new UiRect(0.8f, 0.905f, 0.98f, 0.975f)) with { Enabled = m.Page < m.PageCount - 1 });
         e.Add(Close(aspect, width));
         string folder = m.Folders.Length > m.Folder ? m.Folders[m.Folder] : "";
-        return new UiWindow(WindowKind.Library, "Biblioteca" + (folder.Length > 0 ? " · " + folder : ""),
-            $"{m.Total} videos · mira un video para reproducirlo", aspect, e) { Width = width };
+        return new UiWindow(WindowKind.Library, T("Library") + (folder.Length > 0 ? " · " + folder : ""),
+            VideoCount(m.Total) + " · " + T("look at a video to play it"), aspect, e) { Width = width };
     }
 
     // ---- Horizon ----
@@ -440,15 +439,15 @@ public static class Windows
         var f = s.Format;
         var e = new List<UiElement>();
         e.AddRange(Row(0.3f, 0.6f, 0.03f, 0.97f,
-            Btn(MenuAction.PitchUp, "Inclinar ↑", repeat: true), Btn(MenuAction.PitchDown, "Inclinar ↓", repeat: true),
-            Btn(MenuAction.RollLeft, "Nivelar ↺", repeat: true), Btn(MenuAction.RollRight, "Nivelar ↻", repeat: true),
-            Btn(MenuAction.YawLeft, "Girar ←", repeat: true), Btn(MenuAction.YawRight, "Girar →", repeat: true)));
+            Btn(MenuAction.PitchUp, T("Tilt ↑"), repeat: true), Btn(MenuAction.PitchDown, T("Tilt ↓"), repeat: true),
+            Btn(MenuAction.RollLeft, T("Level ↺"), repeat: true), Btn(MenuAction.RollRight, T("Level ↻"), repeat: true),
+            Btn(MenuAction.YawLeft, T("Turn ←"), repeat: true), Btn(MenuAction.YawRight, T("Turn →"), repeat: true)));
         e.AddRange(Row(0.67f, 0.95f, 0.03f, 0.97f,
-            Btn(MenuAction.SetHorizon, "Fijar con la cabeza"), Btn(MenuAction.ResetHorizon, "Restablecer"),
-            Btn(MenuAction.Recenter, "Recentrar"), Btn(MenuAction.Back, "Volver")));
+            Btn(MenuAction.SetHorizon, T("Set with your head")), Btn(MenuAction.ResetHorizon, T("Reset")),
+            Btn(MenuAction.Recenter, T("Recenter")), Btn(MenuAction.Back, T("Back"))));
         e.Add(Close(aspect, width));
-        string sub = f is null ? "" : $"inclinación {Deg(f.Pitch)} · nivel {Deg(f.Roll)} · giro {Deg(f.Yaw)} · solo este video";
-        return new UiWindow(WindowKind.Horizon, "Horizonte", sub, aspect, e) { Width = width };
+        string sub = f is null ? "" : F("tilt {0} · level {1} · turn {2} · this video only", Deg(f.Pitch), Deg(f.Roll), Deg(f.Yaw));
+        return new UiWindow(WindowKind.Horizon, T("Horizon"), sub, aspect, e) { Width = width };
     }
 
     // ---- Audio and subtitles ----
@@ -457,32 +456,32 @@ public static class Windows
     {
         const float aspect = 2.6f, width = 2.2f;
         var t = s.Tracks;
-        var e = new List<UiElement> { Section("Audio", 0.03f, 0.2f, 0.97f) };
+        var e = new List<UiElement> { Section(T("Audio"), 0.03f, 0.2f, 0.97f) };
         if (t.Audio.Length == 0)
-            e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.03f, 0.27f, 0.97f, 0.39f)) { Detail = "Este video tiene una sola pista de audio (o ninguna)" });
+            e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.03f, 0.27f, 0.97f, 0.39f)) { Detail = T("This video has only one audio track (or none)") });
         else
             e.AddRange(Row(0.27f, 0.39f, 0.03f, 0.97f, t.Audio.Take(5).Select((a, i) => Tile(MenuAction.AudioTrack, a, i, i == t.SelectedAudio)).ToArray()));
-        e.Add(Section("Subtítulos", 0.03f, 0.43f, 0.97f));
-        var subs = new List<UiElement> { Tile(MenuAction.SubtitleTrack, "No", -1, t.SelectedSubtitle < 0) };
+        e.Add(Section(T("Subtitles"), 0.03f, 0.43f, 0.97f));
+        var subs = new List<UiElement> { Tile(MenuAction.SubtitleTrack, T("Off"), -1, t.SelectedSubtitle < 0) };
         subs.AddRange(t.Subtitles.Take(5).Select((x, i) => Tile(MenuAction.SubtitleTrack, x, i, i == t.SelectedSubtitle)));
         e.AddRange(Row(0.5f, 0.62f, 0.03f, 0.97f, subs.ToArray()));
         var spec = Params.Spec(Param.SubtitleSize);
         e.AddRange(SliderRow(Param.SubtitleSize, spec, s.Settings.SubtitleSize, spec.Standard, true, "", 0.68f, 0.79f, 0.03f, 0.97f,
             MathF.Abs(s.Settings.SubtitleSize - spec.Standard) < 0.01f, labelWidth: 0.25f));
-        e.Add(Btn(MenuAction.Back, "Volver").At(new UiRect(0.03f, 0.85f, 0.3f, 0.96f)));
+        e.Add(Btn(MenuAction.Back, T("Back")).At(new UiRect(0.03f, 0.85f, 0.3f, 0.96f)));
         e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.32f, 0.85f, 0.97f, 0.96f))
-        { Detail = "Los subtítulos .srt con el mismo nombre del video se encuentran solos" });
+        { Detail = T("Subtitle .srt files named like the video are found automatically") });
         e.Add(Close(aspect, width));
-        return new UiWindow(WindowKind.Tracks, "Audio y subtítulos", s.Player.Title, aspect, e) { Width = width };
+        return new UiWindow(WindowKind.Tracks, T("Audio and subtitles"), s.Player.Title, aspect, e) { Width = width };
     }
 
     // ---- Calibration wizard ----
 
-    public static readonly string[] CalibrationTitles =
+    public static string[] CalibrationTitles =>
     [
-        "1 de 3 · Lentes: mueve el deslizador hasta que las dos cruces del fondo se vuelvan una sola",
-        "2 de 3 · Menú: ahora junta las cruces cercanas (las del panel) en una sola",
-        "3 de 3 · Distorsión: elige la opción con la que las líneas de la cuadrícula se ven rectas",
+        T("1 of 3 · Lenses: move the slider until the two background crosses become one"),
+        T("2 of 3 · Menu: now merge the near crosses (the ones on the panel) into one"),
+        T("3 of 3 · Distortion: choose the option that makes the grid lines look straight"),
     ];
 
     private static UiWindow Calibration(UiState s)
@@ -512,10 +511,10 @@ public static class Windows
                     Tile(MenuAction.LensLevel, l, i, i == v.LensLevel) with { Enabled = i < 3 || v.ViewerName is not null }).ToArray()));
                 break;
         }
-        e.Add(Btn(MenuAction.CalibrationStep, "◀ Anterior", step - 1).At(new UiRect(0.03f, 0.62f, 0.3f, 0.92f)) with { Enabled = step > 1 });
-        e.Add(Btn(MenuAction.CalibrationStep, step < 3 ? "Siguiente ▶" : "✓ Terminar", step + 1).At(new UiRect(0.7f, 0.62f, 0.97f, 0.92f)));
+        e.Add(Btn(MenuAction.CalibrationStep, T("◀ Previous"), step - 1).At(new UiRect(0.03f, 0.62f, 0.3f, 0.92f)) with { Enabled = step > 1 });
+        e.Add(Btn(MenuAction.CalibrationStep, step < 3 ? T("Next ▶") : T("✓ Finish"), step + 1).At(new UiRect(0.7f, 0.62f, 0.97f, 0.92f)));
         e.Add(Close(aspect, width));
-        return new UiWindow(WindowKind.Calibration, "Asistente de calibración", CalibrationTitles[step - 1], aspect, e) { Width = width };
+        return new UiWindow(WindowKind.Calibration, T("Calibration wizard"), CalibrationTitles[step - 1], aspect, e) { Width = width };
     }
 
     // ---- Building blocks ----
@@ -536,7 +535,7 @@ public static class Windows
         yield return Btn(MenuAction.ParamPlus, "+", (int)p, repeat: true).At(new UiRect(x1 - vw - bw, y0, x1 - vw - 0.005f, y1)) with { Enabled = enabled, Accelerate = true };
         yield return new UiElement(UiKind.Button, MenuAction.ParamReset, new UiRect(x1 - vw + 0.005f, y0, x1, y1))
         {
-            Arg = (int)p, Text = spec.Format(value), Detail = isStandard ? "estándar" : "cambiado · tocar = estándar",
+            Arg = (int)p, Text = spec.Format(value), Detail = isStandard ? T("standard") : T("changed · tap = standard"),
             Active = !isStandard, Enabled = enabled,
         };
     }
