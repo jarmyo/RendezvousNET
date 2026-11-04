@@ -8,4 +8,8 @@
     <IsTrimmable>true</IsTrimmable>
     <RootNamespace>VrView.Core</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- QR decoding of Cardboard viewer codes (see QrDecoder.cs). -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+  </ItemGroup>
 </Project>

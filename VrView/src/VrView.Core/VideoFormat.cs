@@ -11,6 +11,12 @@ public enum Projection
     Sphere360,
     /// <summary>Equidistant fisheye lens (typically 180°–200° field of view).</summary>
     Fisheye,
+    /// <summary>YouTube equi-angular cubemap (EAC), 3×2 faces.</summary>
+    Eac,
+    /// <summary>Plain cubemap, 3×2 faces.</summary>
+    Cubemap,
+    /// <summary>Projection mesh embedded in the file (VR180 cameras).</summary>
+    Mesh,
 }
 
 /// <summary>How the two eyes are packed into a single frame.</summary>
@@ -48,13 +54,17 @@ public readonly record struct UvRect(float ScaleU, float ScaleV, float OffsetU, 
 /// <param name="CenterY">Fisheye circle center offset, as a fraction of the eye height (up is positive).</param>
 /// <param name="RadiusScale">Fisheye circle radius relative to half the eye height.</param>
 /// <param name="NadirDeg">Angular radius of the patch drawn under the viewer; 0 = none.</param>
+[System.Text.Json.Serialization.JsonConverter(typeof(VideoFormatJsonConverter))]
 public readonly record struct VideoFormat(Projection Projection, StereoMode Stereo, bool SwapEyes = false, float FisheyeFov = 190f,
     float HFov = 0f, float VFov = 0f, FisheyeLens Lens = FisheyeLens.Equidistant,
     float CenterX = 0f, float CenterY = 0f, float RadiusScale = 1f, float NadirDeg = 0f)
 {
     public static VideoFormat Default => new(Projection.Flat, StereoMode.Mono);
 
-    public float EquirectHFov => HFov > 0 ? HFov : Projection == Projection.Sphere360 ? 360f : 180f;
+    public float EquirectHFov => HFov > 0 ? HFov : StandardHFov;
+    public float StandardHFov => Projection == Projection.Sphere360 ? 360f : 180f;
+    public bool IsEquirect => Projection is Projection.Dome180 or Projection.Sphere360;
+    public bool IsCubemap => Projection is Projection.Eac or Projection.Cubemap;
     public float EquirectVFov => VFov > 0 ? VFov : 180f;
 
     /// <summary>True when any fine-tuning value differs from the standard layout.</summary>
@@ -123,10 +133,16 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
             _ => (0f, 0f, 1f, 1f),
         };
         // Centered window of that eye.
+        if (IsCubemap)
+        {
+            // The front face (see CubemapMesh for the layout).
+            float fy0 = Projection == Projection.Eac ? 0f : 0.5f;
+            return (x0 + (x1 - x0) / 3, y0 + (y1 - y0) * fy0, x0 + (x1 - x0) * 2 / 3, y0 + (y1 - y0) * (fy0 + 0.5f));
+        }
         var (fw, fh) = Projection switch
         {
             Projection.Sphere360 => (0.3f, 0.6f),
-            Projection.Dome180 or Projection.Fisheye => (0.6f, 0.6f),
+            Projection.Dome180 or Projection.Fisheye or Projection.Mesh => (0.6f, 0.6f),
             _ => (1f, 1f),
         };
         float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h / 2;
@@ -134,27 +150,29 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
     }
 
     /// <summary>Short user-facing (Spanish) label, e.g. "180° SBS".</summary>
-    public string Label
+    public string Label => IsTuned ? $"{ShortLabel} · ajustado" : ShortLabel;
+
+    /// <summary>Projection and eyes only, e.g. "Ojo de pez 190° SBS".</summary>
+    public string ShortLabel => $"{ProjectionLabel(Projection, FisheyeFov)} {EyesLabel}";
+
+    public string EyesLabel => Stereo switch
     {
-        get
-        {
-            string p = Projection switch
-            {
-                Projection.Flat => "Plano",
-                Projection.Dome180 => "180°",
-                Projection.Sphere360 => "360°",
-                Projection.Fisheye => $"Ojo de pez {FisheyeFov:0}°",
-                _ => "?",
-            };
-            string s = Stereo switch
-            {
-                StereoMode.SideBySide => SwapEyes ? "RL" : "SBS",
-                StereoMode.TopBottom => SwapEyes ? "BT" : "TB",
-                _ => "2D",
-            };
-            return IsTuned ? $"{p} {s} · ajustado" : $"{p} {s}";
-        }
-    }
+        StereoMode.SideBySide => SwapEyes ? "RL" : "SBS",
+        StereoMode.TopBottom => SwapEyes ? "BT" : "TB",
+        _ => "2D",
+    };
+
+    public static string ProjectionLabel(Projection projection, float fisheyeFov = 0) => projection switch
+    {
+        Projection.Flat => "Plano",
+        Projection.Dome180 => "180°",
+        Projection.Sphere360 => "360°",
+        Projection.Fisheye => fisheyeFov > 0 ? $"Ojo de pez {fisheyeFov:0}°" : "Ojo de pez",
+        Projection.Eac => "Cubemap EAC",
+        Projection.Cubemap => "Cubemap",
+        Projection.Mesh => "Malla del archivo",
+        _ => "?",
+    };
 
     /// <summary>Formats offered in the manual override cycle, in order.</summary>
     public static IReadOnlyList<VideoFormat> ManualChoices { get; } = new[]
@@ -170,6 +188,8 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
         new VideoFormat(Projection.Sphere360, StereoMode.TopBottom),
         new VideoFormat(Projection.Fisheye, StereoMode.Mono),
         new VideoFormat(Projection.Fisheye, StereoMode.SideBySide),
+        new VideoFormat(Projection.Eac, StereoMode.Mono),
+        new VideoFormat(Projection.Eac, StereoMode.TopBottom),
     };
 
     /// <summary>

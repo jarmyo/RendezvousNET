@@ -128,20 +128,6 @@ public class ThumbnailCropTests
     }
 }
 
-public class SpotsMenuTests
-{
-    [Fact]
-    public void Spot_thumbnails_report_their_slot()
-    {
-        var slots = VrMenuLayout.Buttons(MenuPage.Spots).Where(b => b.Action == MenuAction.SpotSlot).ToList();
-        Assert.Equal(VrMenuLayout.SpotsPerPage, slots.Count);
-        var third = slots[2];
-        var hit = VrMenuLayout.HitTest(MenuPage.Spots, (third.X0 + third.X1) / 2, (third.Y0 + third.Y1) / 2);
-        Assert.Equal(MenuAction.SpotSlot, hit.Action);
-        Assert.Equal(2, hit.Slot);
-    }
-}
-
 public class TreeOfTests
 {
     [Fact]

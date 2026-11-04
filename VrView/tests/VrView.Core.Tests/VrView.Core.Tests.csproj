@@ -14,4 +14,7 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\VrView.Core\VrView.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

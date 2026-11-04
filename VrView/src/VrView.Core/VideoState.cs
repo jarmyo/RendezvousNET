@@ -10,6 +10,8 @@ public sealed class VideoState
 {
     public long PositionMs { get; set; }
     public VideoFormat? FormatOverride { get; set; }
+    /// <summary>Named format profile chosen for this video (null = none).</summary>
+    public string? Profile { get; set; }
     /// <summary>Horizon correction in degrees.</summary>
     public float Pitch { get; set; }
     public float Roll { get; set; }
@@ -18,10 +20,13 @@ public sealed class VideoState
     /// <summary>Bookmarked positions ("marcas") in milliseconds, sorted.</summary>
     public List<long> Spots { get; set; } = [];
 
+    /// <summary>Optional names of spots, by position.</summary>
+    public Dictionary<long, string> SpotNames { get; set; } = [];
+
     public bool HasHorizon => Pitch != 0 || Roll != 0 || Yaw != 0;
 
     /// <summary>True when nothing differs from a never-played video (it need not be stored).</summary>
-    public bool IsEmpty => PositionMs == 0 && FormatOverride is null && !HasHorizon && Spots.Count == 0;
+    public bool IsEmpty => PositionMs == 0 && FormatOverride is null && string.IsNullOrEmpty(Profile) && !HasHorizon && Spots.Count == 0;
 
     public string Serialize()
     {
@@ -34,6 +39,7 @@ public sealed class VideoState
             "yaw=" + Yaw.ToString("0.##", ci),
         };
         if (FormatOverride is { } f) parts.Add("fmt=" + f.Serialize());
+        if (!string.IsNullOrEmpty(Profile)) parts.Add("profile=" + Uri.EscapeDataString(Profile));
         if (Spots.Count > 0) parts.Add("spots=" + string.Join(',', Spots.Select(x => x.ToString(ci))));
         return string.Join(';', parts);
     }
@@ -55,6 +61,7 @@ public sealed class VideoState
                 case "roll" when float.TryParse(value, NumberStyles.Float, ci, out var v): s.Roll = v; break;
                 case "yaw" when float.TryParse(value, NumberStyles.Float, ci, out var v): s.Yaw = v; break;
                 case "fmt": s.FormatOverride = VideoFormat.TryParse(value); break;
+                case "profile": s.Profile = Uri.UnescapeDataString(value); break;
                 case "spots": s.Spots = SpotList.Parse(value.Split(',')); break;
             }
         }
