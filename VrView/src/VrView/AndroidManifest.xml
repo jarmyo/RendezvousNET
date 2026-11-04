@@ -3,6 +3,8 @@
   <!-- Head tracking needs a gyroscope; declared optional so the app still installs without one. -->
   <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
   <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+  <!-- Only used to follow the short link (goo.gl/…) printed on some viewers' QR codes. -->
+  <uses-permission android:name="android.permission.INTERNET" />
   <!-- No storage permission: folders are opened with the Storage Access Framework
        (the system folder picker), which grants persistent read access to that folder only. -->
   <application

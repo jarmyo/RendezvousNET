@@ -9,8 +9,8 @@
     <RootNamespace>VrView</RootNamespace>
     <ApplicationId>net.rendezvous.vrview</ApplicationId>
     <ApplicationTitle>VrView</ApplicationTitle>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
+    <ApplicationDisplayVersion>2.0</ApplicationDisplayVersion>
     <!-- Only 64-bit ARM phones (every phone that can drive a VR viewer) plus x64 for emulators. -->
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
     <!-- Produce an installable .apk (not an .aab) in Release, ready for "adb install". -->

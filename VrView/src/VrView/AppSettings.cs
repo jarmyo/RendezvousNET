@@ -144,6 +144,98 @@ internal sealed class AppSettings
         set => Edit(e => e.PutFloat("controlsOpacity", value));
     }
 
+    public float DwellSeconds
+    {
+        get => _prefs.GetFloat("dwell", 1.4f);
+        set => Edit(e => e.PutFloat("dwell", value));
+    }
+
+    public bool DenseMesh
+    {
+        get => _prefs.GetBoolean("denseMesh", false);
+        set => Edit(e => e.PutBoolean("denseMesh", value));
+    }
+
+    public bool EdgeButtonsOn
+    {
+        get => _prefs.GetBoolean("edgeOn", _prefs.GetFloat("edgeButtons", 40f) > 0);
+        set => Edit(e => e.PutBoolean("edgeOn", value));
+    }
+
+    /// <summary>Previous/next buttons stay at the edges of the view instead of fixed in the scene.</summary>
+    public bool EdgeFollowHead
+    {
+        get => _prefs.GetBoolean("edgeFollow", false);
+        set => Edit(e => e.PutBoolean("edgeFollow", value));
+    }
+
+    public bool LookDownMenu
+    {
+        get => _prefs.GetBoolean("lookDown", true);
+        set => Edit(e => e.PutBoolean("lookDown", value));
+    }
+
+    public TrackingMode Tracking
+    {
+        get => (TrackingMode)_prefs.GetInt("tracking", (int)TrackingMode.AntiDrift);
+        set => Edit(e => e.PutInt("tracking", (int)value));
+    }
+
+    public bool AutoRecenter
+    {
+        get => _prefs.GetBoolean("autoRecenter", true);
+        set => Edit(e => e.PutBoolean("autoRecenter", value));
+    }
+
+    public float SubtitleSize
+    {
+        get => _prefs.GetFloat("subtitleSize", 100f);
+        set => Edit(e => e.PutFloat("subtitleSize", value));
+    }
+
+    public bool ShowFps
+    {
+        get => _prefs.GetBoolean("showFps", false);
+        set => Edit(e => e.PutBoolean("showFps", value));
+    }
+
+    /// <summary>Cardboard URL of the scanned viewer, or null.</summary>
+    public string? ViewerUrl
+    {
+        get => _prefs.GetString("viewerUrl", null);
+        set => Edit(e => e.PutString("viewerUrl", value));
+    }
+
+    /// <summary>Folders picked so far (tree URIs), most recent first.</summary>
+    public List<string> RecentFolders
+    {
+        get => (_prefs.GetString("recentFolders", "") ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+        set => Edit(e => e.PutString("recentFolders", string.Join('\n', value.Distinct().Take(8))));
+    }
+
+    public void AddRecentFolder(string tree)
+    {
+        var list = RecentFolders;
+        list.Remove(tree);
+        list.Insert(0, tree);
+        RecentFolders = list;
+    }
+
+    /// <summary>Snapshot of the global options for the windows and the renderer.</summary>
+    public ViewSettings View(float screenWidthM, float screenHeightM)
+    {
+        var viewer = ViewerUrl is { } url ? ViewerProfile.FromUrl(url) : null;
+        float k1 = 0, k2 = 0;
+        if (viewer is not null)
+            (_, _, k1, k2) = viewer.ToRenderParams(screenWidthM, screenHeightM);
+        int lens = LensLevel;
+        if (lens == 3 && viewer is null) lens = 0;
+        return new ViewSettings(StereoView, Fov, IpdShift, lens, GazeClick, DwellSeconds, ControlsSize, ControlsOpacity,
+            MenuShift, HighQuality, DenseMesh, EdgeButtonsAngle > 0 ? EdgeButtonsAngle : 40f, EdgeButtonsOn, EdgeFollowHead,
+            LookDownMenu, Tracking, AutoRecenter, SubtitleSize, ShowFps,
+            viewer is null ? null : $"{viewer.Vendor} {viewer.Model}".Trim(), k1, k2);
+    }
+
     private void Edit(Action<ISharedPreferencesEditor> change)
     {
         var e = _prefs.Edit()!;

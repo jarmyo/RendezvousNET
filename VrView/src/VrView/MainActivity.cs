@@ -1,3 +1,4 @@
+using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.Graphics;
@@ -18,12 +19,14 @@ namespace VrView;
 public class MainActivity : Activity
 {
     private const int RequestPickFolder = 1;
+    private const int RequestQrImage = 2;
 
     private AppSettings _settings = null!;
     private VideoStore _store = null!;
     private readonly List<MediaItem> _items = new();
     private VideoListAdapter _adapter = null!;
     private TextView _folderText = null!, _emptyText = null!;
+    private Button _viewerButton = null!;
     private Button _playButton = null!, _shuffleButton = null!, _repeatButton = null!, _resumeButton = null!;
     private CheckBox _subfolders = null!;
     private ProgressBar _progress = null!;
@@ -38,7 +41,11 @@ public class MainActivity : Activity
         UpdateToggleLabels();
 
         var folder = _settings.LastFolderUri;
-        if (folder is not null && HasPermission(folder)) LoadFolder(Uri.Parse(folder)!);
+        if (folder is not null && HasPermission(folder))
+        {
+            _settings.AddRecentFolder(folder);
+            LoadFolder(Uri.Parse(folder)!);
+        }
         else ShowEmpty("Elige una carpeta con tus vídeos VR para crear la lista de reproducción.");
     }
 
@@ -99,6 +106,9 @@ public class MainActivity : Activity
         row2.AddView(_repeatButton, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         root.AddView(row2);
 
+        _viewerButton = MakeButton("", (_, _) => ViewerMenu());
+        root.AddView(_viewerButton);
+
         _subfolders = new CheckBox(this) { Text = "Incluir subcarpetas", Checked = _settings.IncludeSubfolders };
         _subfolders.SetTextColor(Color.White);
         _subfolders.CheckedChange += (_, e) =>
@@ -148,6 +158,9 @@ public class MainActivity : Activity
 
     private void UpdateToggleLabels()
     {
+        var viewer = _settings.ViewerUrl is { } url ? ViewerProfile.FromUrl(url) : null;
+        _viewerButton.Text = viewer is null ? "Visor: genérico · escanear su código QR"
+            : $"Visor: {viewer.Vendor} {viewer.Model}".Trim() + " · cambiar";
         _shuffleButton.Text = _settings.Shuffle ? "Aleatorio: sí" : "Aleatorio: no";
         _repeatButton.Text = Playlist.RepeatLabel(_settings.Repeat);
     }
@@ -193,6 +206,11 @@ public class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+        if (requestCode == RequestQrImage && resultCode == Result.Ok && data?.Data is { } image)
+        {
+            ReadQrImage(image);
+            return;
+        }
         if (requestCode != RequestPickFolder || resultCode != Result.Ok || data?.Data is not { } tree) return;
         try
         {
@@ -203,6 +221,7 @@ public class MainActivity : Activity
             // Some providers do not offer persistable grants; the folder still works this session.
         }
         _settings.LastFolderUri = tree.ToString();
+        _settings.AddRecentFolder(tree.ToString()!);
         LoadFolder(tree);
     }
 
@@ -241,6 +260,117 @@ public class MainActivity : Activity
                 _folderText.Text = $"Carpeta: {FolderScanner.FolderName(ContentResolver!, tree)} · {_items.Count} vídeos";
                 if (error is not null) ShowEmpty("No se pudo leer la carpeta: " + error);
                 else if (_items.Count == 0) ShowEmpty("No hay vídeos en esta carpeta.");
+            });
+        });
+    }
+
+    // ---- Viewer profile (Cardboard QR code) ----
+
+    private void ViewerMenu()
+    {
+        new AlertDialog.Builder(this)
+            .SetTitle("Perfil del visor")!
+            .SetMessage("El código QR impreso en muchos visores trae sus lentes y su campo de visión. " +
+                        "Tómale una foto (o búscalo en internet) y elígela aquí.")!
+            .SetItems(["Elegir foto del código QR", "Escribir la dirección del código", "Quitar el perfil"], (_, e) =>
+            {
+                switch (e.Which)
+                {
+                    case 0:
+                        var intent = new Intent(Intent.ActionGetContent);
+                        intent.SetType("image/*");
+                        intent.AddCategory(Intent.CategoryOpenable);
+#pragma warning disable CA1422
+                        StartActivityForResult(Intent.CreateChooser(intent, "Foto del código QR"), RequestQrImage);
+#pragma warning restore CA1422
+                        break;
+                    case 1: AskViewerUrl(); break;
+                    default:
+                        _settings.ViewerUrl = null;
+                        if (_settings.LensLevel == 3) _settings.LensLevel = 0;
+                        UpdateToggleLabels();
+                        break;
+                }
+            })!
+            .Show();
+    }
+
+    private void AskViewerUrl()
+    {
+        var input = new EditText(this) { Hint = "https://google.com/cardboard/cfg?p=…" };
+        input.SetSingleLine(true);
+        new AlertDialog.Builder(this)
+            .SetTitle("Dirección del código QR")!
+            .SetView(input)!
+            .SetPositiveButton("Usar", (_, _) => ApplyViewerUrl(input.Text ?? ""))!
+            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .Show();
+    }
+
+    private void ReadQrImage(Uri image)
+    {
+        Toast.MakeText(this, "Leyendo el código…", ToastLength.Short)!.Show();
+        Task.Run(() =>
+        {
+            string? text = null;
+            try
+            {
+                using var stream = ContentResolver!.OpenInputStream(image);
+                var options = new BitmapFactory.Options { InJustDecodeBounds = true };
+                BitmapFactory.DecodeStream(stream, null, options);
+                int sample = 1;
+                while (Math.Max(options.OutWidth, options.OutHeight) / sample > 2000) sample *= 2;
+                using var stream2 = ContentResolver!.OpenInputStream(image);
+                using var bmp = BitmapFactory.DecodeStream(stream2, null, new BitmapFactory.Options { InSampleSize = sample });
+                if (bmp is not null)
+                {
+                    var pixels = new int[bmp.Width * bmp.Height];
+                    bmp.GetPixels(pixels, 0, bmp.Width, 0, 0, bmp.Width, bmp.Height);
+                    text = QrDecoder.Decode(pixels, bmp.Width, bmp.Height);
+                }
+            }
+            catch (Exception ex) when (ex is Java.Lang.Exception or IOException) { }
+            RunOnUiThread(() =>
+            {
+                if (text is null) Toast.MakeText(this, "No se encontró un código QR en la foto", ToastLength.Long)!.Show();
+                else ApplyViewerUrl(text);
+            });
+        });
+    }
+
+    private void ApplyViewerUrl(string url)
+    {
+        url = url.Trim();
+        Task.Run(async () =>
+        {
+            // Old viewers print short links (goo.gl/…) that redirect to the real address.
+            if (ViewerProfile.IsShortLink(url))
+            {
+                try
+                {
+                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                    using var response = await http.GetAsync(url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url);
+                    url = response.RequestMessage?.RequestUri?.ToString() ?? url;
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { }
+            }
+            var profile = ViewerProfile.FromUrl(url);
+            RunOnUiThread(() =>
+            {
+                if (profile is null)
+                {
+                    Toast.MakeText(this, "Ese código no es de un visor Cardboard (o el enlace corto ya no funciona)", ToastLength.Long)!.Show();
+                    return;
+                }
+                var m = Resources!.DisplayMetrics!;
+                float w = Math.Max(m.WidthPixels, m.HeightPixels) / m.Xdpi * 0.0254f, h = Math.Min(m.WidthPixels, m.HeightPixels) / m.Ydpi * 0.0254f;
+                var (fov, ipd, _, _) = profile.ToRenderParams(w, h);
+                _settings.ViewerUrl = profile.ToUrl();
+                _settings.LensLevel = 3;
+                _settings.Fov = Math.Clamp(MathF.Round(fov), 40f, 130f);
+                _settings.IpdShift = Math.Clamp(MathF.Round(ipd, 2), -0.3f, 0.3f);
+                UpdateToggleLabels();
+                Toast.MakeText(this, $"Visor configurado: {profile.Vendor} {profile.Model}", ToastLength.Long)!.Show();
             });
         });
     }
@@ -315,11 +445,9 @@ internal sealed class VideoListAdapter : BaseAdapter<MediaItem>
 
         var item = _items[position];
         var state = _store.Get(item);
-        var folderFormat = FormatDetector.HasTags(item.Name) ? null : _store.GetFolderFormat(item);
-        var format = state.FormatOverride ?? folderFormat ?? FormatDetector.Detect(item.Name);
-        string formatText = state.FormatOverride is not null ? format.Label + " (manual)"
-            : folderFormat is not null ? format.Label + " (carpeta)"
-            : FormatDetector.HasTags(item.Name) ? format.Label : "formato automático";
+        var choice = FormatResolver.Resolve(new FormatInputs(state.FormatOverride, state.Profile, _store.GetFolder(item),
+            _store.Profiles(item), item.Name, 0, 0, null));
+        string formatText = choice.Source == FormatSource.Auto ? "formato automático" : $"{choice.Format.Label} ({choice.Note})";
         var parts = new List<string> { formatText };
         if (item.SizeBytes > 0) parts.Add($"{item.SizeBytes / (1024.0 * 1024.0):0} MB");
         if (state.PositionMs > 0) parts.Add("continuar en " + MediaUtil.FormatTime(state.PositionMs));

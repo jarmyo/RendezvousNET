@@ -256,7 +256,7 @@ public static class Windows
                 rows.Slider(Param.Ipd, v.IpdShift * 100);
                 rows.Slider(Param.Zoom, v.Fov);
                 rows.Tiles("Distorsión de las lentes", MenuAction.LensLevel, v.LensLevel, LensLevels, enabled: i => i < 3 || v.ViewerName is not null);
-                rows.Text("Perfil del visor", v.ViewerName is { } vn ? $"{vn} (escaneado del código QR)" : "ninguno · se escanea fuera del visor: ☰ › Escanear QR",
+                rows.Text("Perfil del visor", v.ViewerName is { } vn ? $"{vn} (escaneado del código QR)" : "ninguno · se escanea en la lista de videos: «Visor: escanear su código QR»",
                     v.ViewerName is not null ? Btn(MenuAction.ViewerReset, "Quitar perfil") : null);
                 rows.Button(Btn(MenuAction.Open, "Asistente de calibración…", (int)WindowKind.Calibration),
                     "alinear lentes, menú y distorsión en 3 pasos");

@@ -51,6 +51,42 @@ internal static class FolderScanner
         }
     }
 
+    /// <summary>
+    /// Files next to a video (same folder) whose names start with the video's base name and end with
+    /// one of <paramref name="extensions"/>, e.g. "clip.srt" or "clip.es.srt" for "clip.mp4".
+    /// </summary>
+    public static List<(string Name, Uri Uri)> FindCompanions(ContentResolver resolver, Uri treeUri, string relativeName, params string[] extensions)
+    {
+        var result = new List<(string, Uri)>();
+        try
+        {
+            // Walk down from the picked folder by display name.
+            string id = DocumentsContract.GetTreeDocumentId(treeUri)!;
+            var parts = relativeName.Split('/');
+            for (int i = 0; i < parts.Length - 1 && id is not null; i++)
+                id = Children(resolver, treeUri, id).FirstOrDefault(c => c.Name == parts[i] && c.IsDir).Id!;
+            if (id is null) return result;
+            string stem = Path.GetFileNameWithoutExtension(parts[^1]);
+            foreach (var c in Children(resolver, treeUri, id))
+                if (!c.IsDir && c.Name.StartsWith(stem, StringComparison.OrdinalIgnoreCase) &&
+                    extensions.Any(e => c.Name.EndsWith(e, StringComparison.OrdinalIgnoreCase)))
+                    result.Add((c.Name, DocumentsContract.BuildDocumentUriUsingTree(treeUri, c.Id)!));
+        }
+        catch (Java.Lang.Exception) { }
+        return result;
+    }
+
+    private static List<(string Id, string Name, bool IsDir)> Children(ContentResolver resolver, Uri treeUri, string documentId)
+    {
+        var list = new List<(string, string, bool)>();
+        var children = DocumentsContract.BuildChildDocumentsUriUsingTree(treeUri, documentId)!;
+        using var cursor = resolver.Query(children, Columns, null, null, null);
+        if (cursor is null) return list;
+        while (cursor.MoveToNext())
+            list.Add((cursor.GetString(0) ?? "", cursor.GetString(1) ?? "", cursor.GetString(2) == DocumentsContract.Document.MimeTypeDir));
+        return list;
+    }
+
     /// <summary>Display name of the picked folder (falls back to the last path segment).</summary>
     public static string FolderName(ContentResolver resolver, Uri treeUri)
     {
