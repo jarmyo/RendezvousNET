@@ -1,0 +1,1 @@
+Supprimez des vidéos (elles passent d'abord par la corbeille). Les sous-dossiers sont inclus par défaut, avec un interrupteur dans la bibliothèque. Recentrer avec la tête : regardez le nouveau centre et restez immobile.

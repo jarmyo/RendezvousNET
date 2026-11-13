@@ -281,8 +281,17 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         Toast.MakeText(this, T("Horizon set"), ToastLength.Short)!.Show();
     });
 
-    public void OnHorizonCaptureCancelled() => RunOnUiThread(() =>
-        Toast.MakeText(this, T("Horizon adjustment canceled"), ToastLength.Short)!.Show());
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        VideoTrash.HandleResult(this, requestCode, resultCode);
+    }
+
+    public void OnCenterCaptured() => RunOnUiThread(() =>
+        Toast.MakeText(this, T("Center set"), ToastLength.Short)!.Show());
+
+    public void OnCaptureCancelled(bool centering) => RunOnUiThread(() =>
+        Toast.MakeText(this, centering ? T("Recentering canceled") : T("Horizon adjustment canceled"), ToastLength.Short)!.Show());
 
     // ---- Playback ----
 

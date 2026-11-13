@@ -20,7 +20,7 @@ Tiene un botón opcional para invitar una cerveza con Google Play. El material p
 
 | Función | Detalle |
 |---|---|
-| Lista por carpeta | Eliges una carpeta con el selector del sistema (no hace falta ningún permiso de almacenamiento) y se listan sus vídeos en orden natural (`clip2` va antes que `clip10`). Puedes incluir subcarpetas. Al terminar un vídeo empieza el siguiente. |
+| Lista por carpeta | Eliges una carpeta con el selector del sistema (no hace falta ningún permiso de almacenamiento) y se listan sus vídeos en orden natural (`clip2` va antes que `clip10`). Incluye las subcarpetas (se puede apagar en la lista o en la Biblioteca). Al terminar un vídeo empieza el siguiente. |
 | Biblioteca en el visor | Ventana **Biblioteca**: carpetas usadas, miniaturas (se guardan en caché), formato, duración, avance y marcas de cada vídeo. Filtros (180°, 360°, plano, sin ver, con marcas), orden (nombre, avance, tamaño), «▶ Continuar», aleatorio y repetir. No hace falta quitarse el visor para cambiar de vídeo o de carpeta. |
 | Aleatorio y repetición | Aleatorio sí/no. Repetir: no / todo / uno. «Anterior» vuelve por el orden real de reproducción, también en aleatorio. |
 | Formatos | Plano, 180°, 360°, ojo de pez, **cubemap EAC** (YouTube) y cubemap 3×2, y la **malla incrustada** de las cámaras VR180. Mono, lado a lado (SBS/LR), arriba-abajo (TB/OU) y ojos invertidos. |
@@ -177,8 +177,18 @@ Ventana **Horizonte** (o el interruptor «Horizonte de este video» del editor):
 - **Fijar con la cabeza**: aparece una línea azul fija a tu vista; inclina la cabeza hasta que
   quede sobre el horizonte del vídeo y quédate quieto. Tocar la pantalla lo cancela.
 - **Inclinar**, **Nivelar** y **Girar** a mano; **Restablecer** lo quita. Se guarda por video.
-- **Recentrar** pone el frente del vídeo donde miras (también arriba/abajo). Con «Recentrar al
-  empezar cada video» se hace solo de lado a lado al abrir cada video.
+- **Recentrar con la cabeza**: al pulsarlo aparece una cruz; mira lo que quieres al frente y quédate
+  quieto un par de segundos. El centro horizontal y vertical queda fijado ahí. Tocar la pantalla lo
+  cancela. El botón Y del control o la tecla `R` recentran al instante, donde estés mirando. Con
+  «Recentrar al empezar cada video» se hace solo de lado a lado al abrir cada video.
+
+## Borrar un video
+
+En la lista, mantén pulsado un video → «🗑 Borrar video». En el visor: ventana **Info** → «🗑 Borrar
+video». Si Android tiene el video en su biblioteca de medios (la memoria del teléfono o la tarjeta),
+va a la **papelera** del sistema, donde se puede recuperar 30 días, y Android pide confirmación. En
+otras ubicaciones (nubes, Android 10 o anterior) no hay papelera: la app avisa y pide confirmar antes
+de borrarlo para siempre.
 
 ## Alinear lentes y menú
 

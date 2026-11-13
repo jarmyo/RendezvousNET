@@ -234,6 +234,7 @@ public static class Windows
         }
         e.Add(Btn(MenuAction.Back, T("Back")).At(new UiRect(0.04f, 0.89f, 0.30f, 0.97f)));
         e.Add(Btn(MenuAction.Open, T("Edit format"), (int)WindowKind.Format).At(new UiRect(0.32f, 0.89f, 0.58f, 0.97f)));
+        e.Add(Btn(MenuAction.DeleteVideo, T("🗑 Delete video")).At(new UiRect(0.70f, 0.89f, 0.96f, 0.97f)) with { Danger = true });
         e.Add(Close(aspect, width));
         return new UiWindow(WindowKind.Info, T("Information"), s.Player.Title, aspect, e) { Width = width };
     }
@@ -285,7 +286,7 @@ public static class Windows
                         ? F("Calibrating… {0:0} %", s.Tracking.CalibrationProgress * 100) : T("Calibrate (keep still for 5 s)")),
                     T("put the phone on a table; measures the gyroscope error"));
                 rows.Toggle(T("Recenter when each video starts"), MenuAction.AutoRecenter, v.AutoRecenter, T("the front of the video lands where you are looking"));
-                rows.Button(Btn(MenuAction.Recenter, T("Recenter now")), T("also: Y on the gamepad or the R key"));
+                rows.Button(Btn(MenuAction.RecenterAim, T("Recenter with your head")), T("look at the new center and hold still · Y on the gamepad or R recenters at once"));
                 break;
             case 3:
                 rows.Tiles(T("Image quality"), MenuAction.Quality, v.HighQuality ? 0 : 1, T("High (smooth edges)"), T("Normal (less battery)"));
@@ -402,6 +403,7 @@ public static class Windows
         }
         if (m.Folders.Length == 0)
             e.Add(new UiElement(UiKind.Text, MenuAction.None, new UiRect(0.02f, y, 0.24f, y + 0.065f)) { Detail = T("Choose folders in the list (outside the viewer)") });
+        e.Add(new UiElement(UiKind.Toggle, MenuAction.LibrarySubfolders, new UiRect(0.02f, 0.715f, 0.24f, 0.79f)) { Text = T("Subfolders"), Active = m.Subfolders });
         e.Add(new UiElement(UiKind.Toggle, MenuAction.Shuffle, new UiRect(0.02f, 0.8f, 0.24f, 0.88f)) { Text = T("Shuffle"), Active = m.Shuffle });
         e.Add(Btn(MenuAction.Repeat, Playlist.RepeatLabel(m.Repeat)).At(new UiRect(0.02f, 0.895f, 0.24f, 0.975f)));
 
@@ -444,7 +446,7 @@ public static class Windows
             Btn(MenuAction.YawLeft, T("Turn ←"), repeat: true), Btn(MenuAction.YawRight, T("Turn →"), repeat: true)));
         e.AddRange(Row(0.67f, 0.95f, 0.03f, 0.97f,
             Btn(MenuAction.SetHorizon, T("Set with your head")), Btn(MenuAction.ResetHorizon, T("Reset")),
-            Btn(MenuAction.Recenter, T("Recenter")), Btn(MenuAction.Back, T("Back"))));
+            Btn(MenuAction.RecenterAim, T("Recenter with your head")), Btn(MenuAction.Back, T("Back"))));
         e.Add(Close(aspect, width));
         string sub = f is null ? "" : F("tilt {0} · level {1} · turn {2} · this video only", Deg(f.Pitch), Deg(f.Roll), Deg(f.Yaw));
         return new UiWindow(WindowKind.Horizon, T("Horizon"), sub, aspect, e) { Width = width };

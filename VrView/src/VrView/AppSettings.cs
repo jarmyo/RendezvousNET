@@ -35,7 +35,7 @@ internal sealed class AppSettings
 
     public bool IncludeSubfolders
     {
-        get => _prefs.GetBoolean("subfolders", false);
+        get => _prefs.GetBoolean("subfolders", true);
         set => Edit(e => e.PutBoolean("subfolders", value));
     }
 

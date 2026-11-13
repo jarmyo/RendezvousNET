@@ -8,7 +8,7 @@ public class WindowsTests
         new("clip_180_LR.mp4", FormatResolver.Resolve(new FormatInputs(f, null, null, new Dictionary<string, VideoFormat>(),
             "clip_180_LR.mp4", 3840, 1920, null)), scope, null, true, 2, -3.5f, 0, false);
 
-    private static UiState State(WindowKind w, int tab = 0, VideoFormat? f = null) => new(
+    internal static UiState State(WindowKind w, int tab = 0, VideoFormat? f = null) => new(
         w, tab,
         new PlayerStatus("clip.mp4", 60_000, 600_000, true, 50, 2, 24, "180° SBS (este video)", "Sensor: anti-deriva ✓", 30),
         [0.1f, 0.5f],
@@ -320,5 +320,32 @@ public class FolderSettingsV2Tests
         Assert.Equal("A", fs.NewProfileName("A"));
         fs.Profiles["A"] = f;
         Assert.Equal("A 2", fs.NewProfileName("A"));
+    }
+}
+
+public class WindowChangesTests
+{
+    [Fact]
+    public void Library_subfolder_toggle_fits_under_six_folders()
+    {
+        var s = WindowsTests.State(WindowKind.Library) with
+        {
+            Library = WindowsTests.State(WindowKind.Library).Library with { Folders = ["a", "b", "c", "d", "e", "f"], Subfolders = true },
+        };
+        var win = Windows.Build(s);
+        var toggle = win.Find(MenuAction.LibrarySubfolders)!;
+        Assert.True(toggle.Active);
+        foreach (var folder in win.Elements.Where(e => e.Action is MenuAction.LibraryFolder or MenuAction.Shuffle))
+            Assert.True(folder.Rect.Y1 <= toggle.Rect.Y0 || folder.Rect.Y0 >= toggle.Rect.Y1, folder.Text);
+    }
+
+    [Fact]
+    public void Recenter_is_aimed_with_the_head_and_videos_can_be_deleted()
+    {
+        Assert.NotNull(Windows.Build(WindowsTests.State(WindowKind.Horizon)).Find(MenuAction.RecenterAim));
+        Assert.Null(Windows.Build(WindowsTests.State(WindowKind.Horizon)).Find(MenuAction.Recenter));
+        Assert.NotNull(Windows.Build(WindowsTests.State(WindowKind.Settings, 2)).Find(MenuAction.RecenterAim));
+        var delete = Windows.Build(WindowsTests.State(WindowKind.Info)).Find(MenuAction.DeleteVideo)!;
+        Assert.True(delete.Danger);
     }
 }

@@ -406,6 +406,24 @@ internal sealed class MenuPainter : IDisposable
         return bmp;
     }
 
+    /// <summary>Head-locked guide for "recenter with your head": a cross to aim with, and short instructions.</summary>
+    public static Bitmap PaintCenterGuide()
+    {
+        const int w = 2048, h = 256;
+        var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888!)!;
+        var c = new Canvas(bmp);
+        using var line = new Paint { AntiAlias = true, Color = Color.Argb(220, 79, 195, 247), StrokeWidth = 5 };
+        c.DrawLine(w / 2f - 160, h / 2f, w / 2f - 40, h / 2f, line);
+        c.DrawLine(w / 2f + 40, h / 2f, w / 2f + 160, h / 2f, line);
+        c.DrawLine(w / 2f, h / 2f - 110, w / 2f, h / 2f - 40, line);
+        c.DrawLine(w / 2f, h / 2f + 40, w / 2f, h / 2f + 110, line);
+        using var text = new Paint { AntiAlias = true, Color = Color.White, TextAlign = Paint.Align.Center, TextSize = 26 };
+        text.SetShadowLayer(6, 0, 0, Color.Black);
+        c.DrawText(T("Look at what should be straight ahead"), w / 2f, h / 2f - 130, text);
+        c.DrawText(T("and hold still · tap the screen to cancel"), w / 2f, h / 2f + 146, text);
+        return bmp;
+    }
+
     /// <summary>Always-visible previous / next video button shown at the side of the view.</summary>
     public static Bitmap PaintEdgeButton(bool next)
     {

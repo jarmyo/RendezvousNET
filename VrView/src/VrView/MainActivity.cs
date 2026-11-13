@@ -32,6 +32,7 @@ public class MainActivity : Activity
     private ProgressBar _progress = null!;
     private CancellationTokenSource? _scan;
     private TipJar _tipJar = null!;
+    private int _trashVersion;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -56,6 +57,9 @@ public class MainActivity : Activity
     protected override void OnResume()
     {
         base.OnResume();
+        if (_trashVersion != VideoTrash.Version && _settings.LastFolderUri is { } f && HasPermission(f))
+            LoadFolder(Uri.Parse(f)!); // a video was deleted in the player
+        _trashVersion = VideoTrash.Version;
         _adapter.NotifyDataSetChanged(); // refresh resume positions
         UpdateResumeButton();
         UpdateToggleLabels();
@@ -140,6 +144,7 @@ public class MainActivity : Activity
         _adapter = new VideoListAdapter(this, _items, _store);
         list.Adapter = _adapter;
         list.ItemClick += (_, e) => Play(e.Position);
+        list.ItemLongClick += (_, e) => VideoMenu(e.Position);
         root.AddView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
 
         var help = new TextView(this)
@@ -212,6 +217,7 @@ public class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+        if (VideoTrash.HandleResult(this, requestCode, resultCode)) return;
         if (requestCode == RequestQrImage && resultCode == Result.Ok && data?.Data is { } image)
         {
             ReadQrImage(image);
@@ -268,6 +274,29 @@ public class MainActivity : Activity
                 else if (_items.Count == 0) ShowEmpty(T("No videos in this folder."));
             });
         });
+    }
+
+    private void VideoMenu(int position)
+    {
+        if (position < 0 || position >= _items.Count) return;
+        var item = _items[position];
+        new AlertDialog.Builder(this)
+            .SetTitle(item.Name)!
+            .SetItems([T("▶ Play"), T("🗑 Delete video")], (_, e) =>
+            {
+                if (e.Which == 0) { Play(position); return; }
+                VideoTrash.Delete(this, item, () =>
+                {
+                    _trashVersion = VideoTrash.Version;
+                    _items.RemoveAll(i => i.Location == item.Location);
+                    _adapter.NotifyDataSetChanged();
+                    if (_settings.LastVideoUri == item.Location) _settings.LastVideoUri = null;
+                    UpdateResumeButton();
+                    if (_settings.LastFolderUri is { } f)
+                        _folderText.Text = F("Folder: {0}", FolderScanner.FolderName(ContentResolver!, Uri.Parse(f)!)) + " · " + VideoCount(_items.Count);
+                });
+            })!
+            .Show();
     }
 
     private void TipMenu()

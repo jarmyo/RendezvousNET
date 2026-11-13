@@ -91,7 +91,8 @@ public sealed record LibraryModel(
     bool Shuffle,
     RepeatMode Repeat,
     bool Loading,
-    int ThumbsVersion)
+    int ThumbsVersion,
+    bool Subfolders = false)
 {
     public const int PerPage = 8;
     public static string[] FilterLabels => [T("All"), "180°", "360°", T("Flat"), T("Unwatched"), T("With bookmarks")];

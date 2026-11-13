@@ -1,0 +1,1 @@
+Borra videos (primero van a la papelera). Las subcarpetas se incluyen por defecto, con un interruptor en la biblioteca. Recentrar con la cabeza: mira el nuevo centro y quédate quieto.

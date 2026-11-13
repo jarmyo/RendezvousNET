@@ -142,6 +142,8 @@ public partial class PlayerActivity
                 SaveVideoState();
                 break;
             case MenuAction.SetHorizon: StartHorizonCapture(); return;
+            case MenuAction.RecenterAim: StartCenterCapture(); return;
+            case MenuAction.DeleteVideo: DeleteCurrentVideo(); return;
 
             // Spots
             case MenuAction.SpotAdd: AddSpot(); break;
@@ -220,6 +222,10 @@ public partial class PlayerActivity
 
             // Library
             case MenuAction.LibraryFolder: LoadLibraryFolder(arg); break;
+            case MenuAction.LibrarySubfolders:
+                _settings.IncludeSubfolders = !_settings.IncludeSubfolders;
+                if (_library is { Folder: >= 0 } sub) LoadLibraryFolder(sub.Folder);
+                break;
             case MenuAction.LibraryFilter:
                 if (_library is { } lf) { lf.Filter = arg; lf.Page = 0; RebuildLibraryView(); }
                 break;
@@ -246,6 +252,35 @@ public partial class PlayerActivity
         _glView.QueueEvent(() => _renderer.StartHorizonCapture());
         if (!_settings.StereoView)
             Toast.MakeText(this, T("Tilt the phone until the line matches the horizon, then hold still"), ToastLength.Long)!.Show();
+    }
+
+    private void StartCenterCapture()
+    {
+        CloseWindow(all: true);
+        ShowOverlay(false);
+        _renderer.TouchPitch = 0;
+        _glView.QueueEvent(() => _renderer.StartCenterCapture());
+        if (!_settings.StereoView)
+            Toast.MakeText(this, T("Point the phone at what should be in front and hold still"), ToastLength.Long)!.Show();
+    }
+
+    /// <summary>Asks to move the playing video to the trash; once it is gone, plays the next one.</summary>
+    private void DeleteCurrentVideo()
+    {
+        if (Current is not { } item) return;
+        CloseWindow(all: true);
+        if (_prepared && _player.IsPlaying) _player.Pause();
+        VideoTrash.Delete(this, item, () =>
+        {
+            if (_settings.LastVideoUri == item.Location) _settings.LastVideoUri = null;
+            _library?.Items.RemoveAll(i => i.Location == item.Location);
+            var rest = _playlist.Items.Where(i => i.Location != item.Location).ToList();
+            ReleasePlayer(); // so no position is saved for a video that is gone
+            if (rest.Count == 0) { Finish(); return; }
+            int index = Math.Min(_playlist.CurrentIndex, rest.Count - 1);
+            _playlist = new Playlist(rest, index, _settings.Shuffle, _settings.Repeat);
+            OpenCurrent();
+        });
     }
 
     private void AdjustHorizon(float pitch, float roll, float yaw)
@@ -786,7 +821,8 @@ public partial class PlayerActivity
                 f.ShortLabel, string.Join(" · ", parts), Progress(item, st), item.Location == Current?.Location);
         }).ToArray();
         return new LibraryModel(lib.Names, Math.Max(0, lib.Folder), lib.Filter, lib.Sort, lib.Page, pages, lib.View.Count,
-            entries, _settings.LastVideoName, _playlist.Shuffle, _playlist.Repeat, lib.Loading, _libThumbs.Version);
+            entries, _settings.LastVideoName, _playlist.Shuffle, _playlist.Repeat, lib.Loading, _libThumbs.Version,
+            _settings.IncludeSubfolders);
     }
 
     private void PlayFromLibrary(int slot)

@@ -12,7 +12,7 @@ con la estructura que usa `fastlane supply`, y también se puede copiar a mano e
 | Alemán | `de-DE` |
 
 Cada carpeta trae `title.txt` (30 caracteres), `short_description.txt` (80), `full_description.txt`
-(4000), `changelogs/3.txt` (500) e `images/` con `icon.png` (512×512) y `featureGraphic.png`
+(4000), `changelogs/<versión>.txt` (500) e `images/` con `icon.png` (512×512) y `featureGraphic.png`
 (1024×500). Los tests revisan estos límites.
 
 ## Lo que falta antes de publicar
