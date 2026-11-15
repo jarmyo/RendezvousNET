@@ -1,6 +1,6 @@
 namespace VrView.Core;
 
-/// <summary>Global viewer and control options (shown in Ajustes, used by the renderer).</summary>
+/// <summary>Global viewer and control options (shown in Settings, used by the renderer).</summary>
 public sealed record ViewSettings(
     bool StereoView = true,
     float Fov = 95f,
@@ -117,11 +117,12 @@ public sealed record LibraryModel(
     bool Shuffle,
     RepeatMode Repeat,
     bool Loading,
-    int ThumbsVersion)
+    int ThumbsVersion,
+    bool Subfolders = false)
 {
     public const int PerPage = 8;
-    public static readonly string[] FilterLabels = ["Todos", "180°", "360°", "Plano", "Sin ver", "Con marcas"];
-    public static readonly string[] SortLabels = ["nombre", "avance", "tamaño"];
+    public static string[] FilterLabels => [T("All"), "180°", "360°", T("Flat"), T("Unwatched"), T("With bookmarks")];
+    public static string[] SortLabels => [T("name"), T("progress"), T("size")];
     public static LibraryModel Empty => new([], 0, 0, 0, 0, 1, 0, [], null, false, RepeatMode.All, false, 0);
 }
 

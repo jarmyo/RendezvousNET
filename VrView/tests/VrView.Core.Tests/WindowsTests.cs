@@ -8,7 +8,7 @@ public class WindowsTests
         new("clip_180_LR.mp4", FormatResolver.Resolve(new FormatInputs(f, null, null, new Dictionary<string, VideoFormat>(),
             "clip_180_LR.mp4", 3840, 1920, null)), scope, null, true, 2, -3.5f, 0, false);
 
-    private static UiState State(WindowKind w, int tab = 0, VideoFormat? f = null) => new(
+    internal static UiState State(WindowKind w, int tab = 0, VideoFormat? f = null) => new(
         w, tab,
         new PlayerStatus("clip.mp4", 60_000, 600_000, true, 50, 2, 24, "180° SBS (este video)", "Sensor: anti-deriva ✓", 30),
         [0.1f, 0.5f],
@@ -95,12 +95,12 @@ public class WindowsTests
         Assert.False(w.Find(MenuAction.ParamSet, (int)Param.Nadir)!.Enabled);
         Assert.False(w.Find(MenuAction.NadirToggle)!.Active);
         Assert.True(w.Find(MenuAction.FormatProjection, (int)Projection.Dome180)!.Active);
-        Assert.Contains("estándar", w.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
+        Assert.Contains("standard", w.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
 
         var tuned = Windows.Build(State(WindowKind.Format, f: new VideoFormat(Projection.Dome180, StereoMode.SideBySide, VFov: 150, NadirDeg: 30)));
         Assert.True(tuned.Find(MenuAction.ParamSet, (int)Param.Nadir)!.Enabled);
         Assert.True(tuned.Find(MenuAction.NadirToggle)!.Active);
-        Assert.Contains("cambiado", tuned.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
+        Assert.Contains("changed", tuned.Find(MenuAction.ParamReset, (int)Param.VFov)!.Detail);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class FormatResolverTests
         var fromFolder = R("a.mp4", folder: folder, meta: mono360);
         Assert.Equal(FormatSource.FolderProfile, fromFolder.Source);
         Assert.Equal(200f, fromFolder.Format.HFov);
-        Assert.Equal("perfil Cámara 200°", fromFolder.Note);
+        Assert.Equal("profile Cámara 200°", fromFolder.Note);
         Assert.Equal(FormatScope.Profile, fromFolder.DefaultScope);
         // Tags in the name win over the folder.
         Assert.Equal(FormatSource.NameTags, R("a_360_TB.mp4", folder: folder).Source);
@@ -201,7 +201,7 @@ public class FormatResolverTests
         var c = R("a_180_LR.mp4", folder: new FolderEntry { Format = new VideoFormat(Projection.Sphere360, StereoMode.Mono) });
         Assert.Equal(5, c.Candidates.Count);
         Assert.Single(c.Candidates, x => x.Used);
-        Assert.Contains(c.Candidates, x => x.Text.Contains("no se aplica"));
+        Assert.Contains(c.Candidates, x => x.Text.Contains("does not apply"));
         Assert.Equal("2:1", FormatResolver.AspectText(3840, 1920));
         Assert.Equal("16:9", FormatResolver.AspectText(1920, 1080));
     }
@@ -379,7 +379,7 @@ public class EditModeWindowsTests
         var seek = edit.Find(MenuAction.Seek)!;
         Assert.Null(seek.Ticks);
         Assert.Equal(4, seek.Ranges!.Length);
-        Assert.Contains("quedará de 6:40", edit.Subtitle);
+        Assert.Contains("will be 6:40 long", edit.Subtitle);
         Assert.StartsWith("✂", edit.Title);
     }
 
@@ -387,7 +387,7 @@ public class EditModeWindowsTests
     public void Marking_a_cut_changes_the_button_and_the_subtitle()
     {
         var w = Windows.Build(State(WindowKind.Player, Edit(pending: true)));
-        Assert.Contains("Fin", w.Find(MenuAction.CutMark)!.Text);
+        Assert.Contains("Cut end", w.Find(MenuAction.CutMark)!.Text);
         Assert.Contains("6:40", w.Subtitle);
         Assert.False(Windows.SameContent(w, Windows.Build(State(WindowKind.Player, Edit()))));
     }
@@ -400,5 +400,32 @@ public class EditModeWindowsTests
         Assert.Equal(2, cells.Count);
         Assert.Contains("0:00 → 3:00", cells[0].Text);
         Assert.Equal(300_000, cells[1].Ms);
+    }
+}
+
+public class WindowChangesTests
+{
+    [Fact]
+    public void Library_subfolder_toggle_fits_under_six_folders()
+    {
+        var s = WindowsTests.State(WindowKind.Library) with
+        {
+            Library = WindowsTests.State(WindowKind.Library).Library with { Folders = ["a", "b", "c", "d", "e", "f"], Subfolders = true },
+        };
+        var win = Windows.Build(s);
+        var toggle = win.Find(MenuAction.LibrarySubfolders)!;
+        Assert.True(toggle.Active);
+        foreach (var folder in win.Elements.Where(e => e.Action is MenuAction.LibraryFolder or MenuAction.Shuffle))
+            Assert.True(folder.Rect.Y1 <= toggle.Rect.Y0 || folder.Rect.Y0 >= toggle.Rect.Y1, folder.Text);
+    }
+
+    [Fact]
+    public void Recenter_is_aimed_with_the_head_and_videos_can_be_deleted()
+    {
+        Assert.NotNull(Windows.Build(WindowsTests.State(WindowKind.Horizon)).Find(MenuAction.RecenterAim));
+        Assert.Null(Windows.Build(WindowsTests.State(WindowKind.Horizon)).Find(MenuAction.Recenter));
+        Assert.NotNull(Windows.Build(WindowsTests.State(WindowKind.Settings, 2)).Find(MenuAction.RecenterAim));
+        var delete = Windows.Build(WindowsTests.State(WindowKind.Info)).Find(MenuAction.DeleteVideo)!;
+        Assert.True(delete.Danger);
     }
 }

@@ -101,6 +101,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        AppLanguage.Apply(this); // Also opened directly from "Open with".
         Window!.AddFlags(WindowManagerFlags.KeepScreenOn | WindowManagerFlags.Fullscreen);
         if (OperatingSystem.IsAndroidVersionAtLeast(28))
             Window.Attributes!.LayoutInDisplayCutoutMode = LayoutInDisplayCutoutMode.ShortEdges;
@@ -145,7 +146,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         {
             _settings.StereoView = false;
             PushConfig();
-            Toast.MakeText(this, "Este teléfono no tiene giroscopio: arrastra con el dedo para mirar alrededor.", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("This phone has no gyroscope: drag with your finger to look around."), ToastLength.Long)!.Show();
         }
         ShowOverlay(!_settings.StereoView);
     }
@@ -220,7 +221,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         if (locations is not null)
         {
             for (int i = 0; i < locations.Length; i++)
-                items.Add(new MediaItem(locations[i], names is not null && i < names.Length ? names[i] : $"vídeo {i + 1}",
+                items.Add(new MediaItem(locations[i], names is not null && i < names.Length ? names[i] : F("video {0}", i + 1),
                     sizes is not null && i < sizes.Length ? sizes[i] : 0, At(pages, i), At(keys, i)));
             start = intent.GetIntExtra(ExtraStart, 0);
         }
@@ -288,11 +289,20 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         SaveVideoState();
         PushConfig();
         RefreshUi();
-        Toast.MakeText(this, "Horizonte fijado", ToastLength.Short)!.Show();
+        Toast.MakeText(this, T("Horizon set"), ToastLength.Short)!.Show();
     });
 
-    public void OnHorizonCaptureCancelled() => RunOnUiThread(() =>
-        Toast.MakeText(this, "Ajuste de horizonte cancelado", ToastLength.Short)!.Show());
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        VideoTrash.HandleResult(this, requestCode, resultCode);
+    }
+
+    public void OnCenterCaptured() => RunOnUiThread(() =>
+        Toast.MakeText(this, T("Center set"), ToastLength.Short)!.Show());
+
+    public void OnCaptureCancelled(bool centering) => RunOnUiThread(() =>
+        Toast.MakeText(this, centering ? T("Recentering canceled") : T("Horizon adjustment canceled"), ToastLength.Short)!.Show());
 
     /// <summary>vrview.json was rewritten outside the app (VrCut moved the spots after cutting the video).</summary>
     private void OnFolderFileChanged(string tree) => _handler.Post(() =>
@@ -301,7 +311,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         // The video itself may have been replaced too: open it again without saving the old state.
         ReleasePlayer();
         _library = null;
-        Toast.MakeText(this, $"{FolderSettings.FileName} cambió fuera de la app (VrCut): se recargaron marcas y cortes", ToastLength.Long)!.Show();
+        Toast.MakeText(this, F("{0} changed outside the app (VrCut): bookmarks and cuts reloaded", FolderSettings.FileName), ToastLength.Long)!.Show();
         if (_surface is not null) OpenCurrent();
     });
 
@@ -336,7 +346,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         RefreshFormat();
         SpotsChanged();
         if (_store.IsReadOnlyFolder(item))
-            Toast.MakeText(this, "Para guardar vrview.json en la carpeta, vuelve a elegirla en la lista.", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("To save vrview.json in the folder, choose it again in the list."), ToastLength.Long)!.Show();
         if (_openedOnce && _settings.AutoRecenter) _renderer.RequestRecenter(yawOnly: true);
         _openedOnce = true;
         _prepared = false;
@@ -463,8 +473,8 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
     {
         _prepared = false;
         _consecutiveErrors++;
-        string hint = Current is { IsRemote: true } ? ". Si es un video web, su enlace pudo expirar: ábrelo otra vez desde su página en el navegador" : "";
-        Toast.MakeText(this, $"No se puede reproducir «{Current?.Name}» ({detail}){hint}", ToastLength.Long)!.Show();
+        string hint = Current is { IsRemote: true } ? ". " + T("If it is a web video, its link may have expired: open it again from its page in the browser") : "";
+        Toast.MakeText(this, F("Cannot play “{0}” ({1})", Current?.Name, detail) + hint, ToastLength.Long)!.Show();
         if (_playlist.Count > 1 && _consecutiveErrors < _playlist.Count)
         {
             _handler.PostDelayed(() =>
@@ -596,16 +606,16 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         _overlay.Clickable = true; // swallow touches so they do not reach the GL view
 
         var top = ButtonRow(_overlay);
-        top.AddView(OverlayButton("← Lista", (_, _) => Finish()));
+        top.AddView(OverlayButton(T("← List"), (_, _) => Finish()));
         _viewButton = OverlayButton("", (_, _) => ToggleStereoView());
         top.AddView(_viewButton);
         _editButton = OverlayButton("", (_, _) => HandleAction(MenuAction.EditMode, 0, Source.Touch));
         top.AddView(_editButton);
         foreach (var (kind, label) in new[]
                  {
-                     (WindowKind.Format, "Formato"), (WindowKind.Spots, "Marcas"), (WindowKind.Cuts, "Cortes"),
-                     (WindowKind.Horizon, "Horizonte"), (WindowKind.Tracks, "Audio y subt."), (WindowKind.Info, "Info"),
-                     (WindowKind.Library, "Biblioteca"), (WindowKind.Settings, "⚙ Ajustes"),
+                     (WindowKind.Format, T("Format")), (WindowKind.Spots, T("Bookmarks")), (WindowKind.Cuts, T("Cuts")),
+                     (WindowKind.Horizon, T("Horizon")), (WindowKind.Tracks, T("Audio & subs")), (WindowKind.Info, T("Info")),
+                     (WindowKind.Library, T("Library")), (WindowKind.Settings, T("⚙ Settings")),
                  })
         {
             var b = OverlayButton(label, (_, _) => OpenWindow(kind, Source.Touch));
@@ -613,10 +623,10 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
             if (kind == WindowKind.Spots) _viewModeButtons.Add(b);
             if (kind == WindowKind.Cuts) _editModeButtons.Add(b);
         }
-        var nameSpot = OverlayButton("✎ Nombrar marca", (_, _) => NameSpot());
+        var nameSpot = OverlayButton(T("✎ Name bookmark"), (_, _) => NameSpot());
         top.AddView(nameSpot);
         _viewModeButtons.Add(nameSpot);
-        top.AddView(OverlayButton("✕ Ocultar", (_, _) => ShowOverlay(false)));
+        top.AddView(OverlayButton(T("✕ Hide"), (_, _) => ShowOverlay(false)));
 
         _titleText = new TextView(this) { Ellipsize = Android.Text.TextUtils.TruncateAt.Middle };
         _titleText.SetSingleLine(true);
@@ -659,7 +669,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         controls.AddView(_playButton);
         controls.AddView(OverlayButton("10 ▶▶", (_, _) => HandleAction(MenuAction.Fwd10, 0, Source.Touch)));
         controls.AddView(OverlayButton("▶|", (_, _) => HandleAction(MenuAction.Next, 0, Source.Touch)));
-        foreach (var (action, label) in new[] { (MenuAction.SpotPrev, "◀ Marca"), (MenuAction.SpotAdd, "＋ Marca"), (MenuAction.SpotNext, "Marca ▶") })
+        foreach (var (action, label) in new[] { (MenuAction.SpotPrev, T("◀ Bookmark")), (MenuAction.SpotAdd, T("＋ Bookmark")), (MenuAction.SpotNext, T("Bookmark ▶")) })
         {
             var b = OverlayButton(label, (_, _) => HandleAction(action, 0, Source.Touch));
             controls.AddView(b);
@@ -673,15 +683,15 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
                      OverlayButton("◀ 1 s", (_, _) => HandleAction(MenuAction.Back1, 0, Source.Touch)),
                      OverlayButton("1 s ▶", (_, _) => HandleAction(MenuAction.Fwd1, 0, Source.Touch)),
                      _cutButton,
-                     OverlayButton("◀ Corte", (_, _) => HandleAction(MenuAction.CutPrev, 0, Source.Touch)),
-                     OverlayButton("Corte ▶", (_, _) => HandleAction(MenuAction.CutNext, 0, Source.Touch)),
+                     OverlayButton(T("◀ Cut"), (_, _) => HandleAction(MenuAction.CutPrev, 0, Source.Touch)),
+                     OverlayButton(T("Cut ▶"), (_, _) => HandleAction(MenuAction.CutNext, 0, Source.Touch)),
                      _skipButton,
                  })
         {
             controls.AddView(b);
             _editModeButtons.Add(b);
         }
-        controls.AddView(OverlayButton("Recentrar", (_, _) => HandleAction(MenuAction.Recenter, 0, Source.Touch)));
+        controls.AddView(OverlayButton(T("Recenter"), (_, _) => HandleAction(MenuAction.Recenter, 0, Source.Touch)));
         controls.AddView(OverlayButton("Vol −", (_, _) => HandleAction(MenuAction.VolDown, 0, Source.Touch)));
         controls.AddView(OverlayButton("Vol +", (_, _) => HandleAction(MenuAction.VolUp, 0, Source.Touch)));
 
@@ -770,8 +780,8 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
             long d = Duration;
             _seekBar.Progress = d > 0 ? (int)(Position * 1000 / d) : 0;
         }
-        _playButton.Text = p.Playing ? "II Pausa" : "▶ Reproducir";
-        _viewButton.Text = _settings.StereoView ? "Vista: visor VR" : "Vista: pantalla";
+        _playButton.Text = p.Playing ? T("II Pause") : T("▶ Play");
+        _viewButton.Text = _settings.StereoView ? T("View: VR viewer") : T("View: screen");
         if (_editMode) _spotMarks.SetCuts(_cuts, _cutStart, Duration);
         else _spotMarks.SetSpots(_spots, Duration);
         UpdateOverlayMode();

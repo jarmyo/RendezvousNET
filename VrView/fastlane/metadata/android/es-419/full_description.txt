@@ -1,0 +1,37 @@
+VrView convierte tu celular y un visor VR sencillo en un cine personal para los videos que ya tienes. Elige una carpeta y se vuelve una lista de reproducción: mete el celular en el visor y a ver, sin cuentas y sin anuncios.
+
+VrView es gratis y viene completo. Todas las funciones están incluidas. Si te gusta, hay un botón opcional de pago único para invitarme una cerveza.
+
+LISTAS POR CARPETA
+• Elige cualquier carpeta, con o sin subcarpetas, y reprodúcela en orden natural
+• Aleatorio, repetir todo o repetir uno
+• Una biblioteca dentro del visor, con miniaturas, filtros y orden, para cambiar de video sin quitártelo
+• Sigue donde te quedaste, video por video
+
+LOS FORMATOS QUE DE VERDAD USAS
+• Plano, 180°, 360°, ojo de pez, cubemap EAC, cubemap 3×2 y la malla incrustada de las cámaras VR180
+• Mono, lado a lado, arriba-abajo y ojos invertidos
+• Se detectan solos por los metadatos VR del archivo, las etiquetas del nombre (como _180_LR) o su forma
+• Un editor de formato completo para cámaras que no siguen el estándar: cobertura, ángulo del lente, centro y tamaño del círculo
+• Guarda un formato como perfil y úsalo en toda una carpeta
+
+HECHO PARA VISORES DE CELULAR
+• Seguimiento anti-deriva, para que la imagen se quede frente a ti
+• Escanea el código QR de tu visor para cargar sus lentes, o usa el asistente de calibración de 3 pasos
+• Corrección de la distorsión de las lentes y separación ajustable
+• Mira un botón para pulsarlo, o usa el botón del visor, un control Bluetooth o un teclado
+• Nivela con la cabeza el horizonte de un video chueco
+
+Y ADEMÁS
+• Marcas con miniaturas y nombre
+• Elección de pista de audio y subtítulos, incluidos los .srt junto al video
+• Información técnica: códec, resolución, cuadros por segundo y decodificación por hardware o software
+• Vista en pantalla sin visor: arrastra para mirar alrededor y pellizca para hacer zoom
+• Aparece en «Abrir con» de galerías y gestores de archivos
+• Disponible en español, inglés, francés y alemán
+
+TUS VIDEOS SON TUYOS
+VrView no necesita permiso de almacenamiento: solo das acceso a las carpetas que eliges. No hay cuentas, anuncios ni analíticas. Tus ajustes se guardan en tu dispositivo, en un pequeño archivo vrview.json dentro de cada carpeta, así que sobreviven a una reinstalación.
+
+BUENO SABER
+VrView reproduce archivos de video guardados en tu dispositivo; no incluye videos ni un servicio de streaming. Las resoluciones que se ven fluidas dependen del decodificador de video de tu celular. El seguimiento de la cabeza necesita giroscopio; sin él, arrastra con el dedo para mirar alrededor. Requiere Android 8.0 o posterior.

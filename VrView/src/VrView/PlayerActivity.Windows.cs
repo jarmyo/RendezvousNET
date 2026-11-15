@@ -142,11 +142,13 @@ public partial class PlayerActivity
                 SaveVideoState();
                 break;
             case MenuAction.SetHorizon: StartHorizonCapture(); return;
+            case MenuAction.RecenterAim: StartCenterCapture(); return;
+            case MenuAction.DeleteVideo: DeleteCurrentVideo(); return;
 
             // Spots
             case MenuAction.SpotAdd: AddSpot(); break;
-            case MenuAction.SpotPrev: JumpToSpot(SpotList.Previous(_state.Spots, Position), "No hay marcas antes"); break;
-            case MenuAction.SpotNext: JumpToSpot(SpotList.Next(_state.Spots, Position), "No hay marcas después"); break;
+            case MenuAction.SpotPrev: JumpToSpot(SpotList.Previous(_state.Spots, Position), T("No bookmarks before this point")); break;
+            case MenuAction.SpotNext: JumpToSpot(SpotList.Next(_state.Spots, Position), T("No bookmarks after this point")); break;
             case MenuAction.SpotPagePrev: _spotPage = Math.Max(0, _spotPage - 1); break;
             case MenuAction.SpotPageNext: _spotPage = Math.Min(SpotsModel().PageCount - 1, _spotPage + 1); break;
             case MenuAction.SpotDeleteMode: _spotDeleteMode = !_spotDeleteMode; break;
@@ -196,7 +198,7 @@ public partial class PlayerActivity
                 break;
             case MenuAction.Calibrate:
                 _tracker.Calibrate();
-                Toast.MakeText(this, "Deja el teléfono quieto 5 segundos", ToastLength.Short)!.Show();
+                Toast.MakeText(this, T("Keep the phone still for 5 seconds"), ToastLength.Short)!.Show();
                 break;
             case MenuAction.AutoRecenter: _settings.AutoRecenter = !_settings.AutoRecenter; break;
             case MenuAction.Quality: _settings.HighQuality = arg == 0; break;
@@ -220,6 +222,10 @@ public partial class PlayerActivity
 
             // Library
             case MenuAction.LibraryFolder: LoadLibraryFolder(arg); break;
+            case MenuAction.LibrarySubfolders:
+                _settings.IncludeSubfolders = !_settings.IncludeSubfolders;
+                if (_library is { Folder: >= 0 } sub) LoadLibraryFolder(sub.Folder);
+                break;
             case MenuAction.LibraryFilter:
                 if (_library is { } lf) { lf.Filter = arg; lf.Page = 0; RebuildLibraryView(); }
                 break;
@@ -248,7 +254,36 @@ public partial class PlayerActivity
         ShowOverlay(false);
         _glView.QueueEvent(() => _renderer.StartHorizonCapture());
         if (!_settings.StereoView)
-            Toast.MakeText(this, "Inclina el teléfono hasta alinear la línea con el horizonte y quédate quieto", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("Tilt the phone until the line matches the horizon, then hold still"), ToastLength.Long)!.Show();
+    }
+
+    private void StartCenterCapture()
+    {
+        CloseWindow(all: true);
+        ShowOverlay(false);
+        _renderer.TouchPitch = 0;
+        _glView.QueueEvent(() => _renderer.StartCenterCapture());
+        if (!_settings.StereoView)
+            Toast.MakeText(this, T("Point the phone at what should be in front and hold still"), ToastLength.Long)!.Show();
+    }
+
+    /// <summary>Asks to move the playing video to the trash; once it is gone, plays the next one.</summary>
+    private void DeleteCurrentVideo()
+    {
+        if (Current is not { } item) return;
+        CloseWindow(all: true);
+        if (_prepared && _player.IsPlaying) _player.Pause();
+        VideoTrash.Delete(this, item, () =>
+        {
+            if (_settings.LastVideoUri == item.Location) _settings.LastVideoUri = null;
+            _library?.Items.RemoveAll(i => i.Location == item.Location);
+            var rest = _playlist.Items.Where(i => i.Location != item.Location).ToList();
+            ReleasePlayer(); // so no position is saved for a video that is gone
+            if (rest.Count == 0) { Finish(); return; }
+            int index = Math.Min(_playlist.CurrentIndex, rest.Count - 1);
+            _playlist = new Playlist(rest, index, _settings.Shuffle, _settings.Repeat);
+            OpenCurrent();
+        });
     }
 
     private void AdjustHorizon(float pitch, float roll, float yaw)
@@ -319,7 +354,7 @@ public partial class PlayerActivity
     {
         if (_stateItem is { } item && scope == FormatScope.Profile && !_store.CanUseProfiles(item))
         {
-            Toast.MakeText(this, "Los perfiles se guardan en vrview.json: elige la carpeta en la lista para poder escribir en ella.", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("Profiles are saved in vrview.json: choose the folder in the list so it can be written to."), ToastLength.Long)!.Show();
             return;
         }
         _editScope = scope;
@@ -327,13 +362,13 @@ public partial class PlayerActivity
         EditFormat(f => f);
         Toast.MakeText(this, scope switch
         {
-            FormatScope.Folder => "Formato guardado para toda la carpeta",
-            FormatScope.Profile => $"Formato guardado en el perfil «{_choice.Profile}»",
-            _ => "Formato guardado solo para este video",
+            FormatScope.Folder => T("Format saved for the whole folder"),
+            FormatScope.Profile => F("Format saved in the profile “{0}”", _choice.Profile),
+            _ => T("Format saved for this video only"),
         }, ToastLength.Short)!.Show();
     }
 
-    /// <summary>"Volver a automático": forgets the format where the editor saves.</summary>
+    /// <summary>"Back to automatic": forgets the format where the editor saves.</summary>
     private void FormatToAuto()
     {
         if (_stateItem is not { } item) return;
@@ -344,7 +379,7 @@ public partial class PlayerActivity
         _editScope = null;
         RefreshFormat();
         SpotsChanged();
-        Toast.MakeText(this, "Formato: " + CurrentFormat.Label + " (" + _choice.Note + ")", ToastLength.Short)!.Show();
+        Toast.MakeText(this, F("Format: {0} ({1})", CurrentFormat.Label, _choice.Note), ToastLength.Short)!.Show();
     }
 
     private void ChangeParam(Param p, MenuAction action, float fraction)
@@ -409,8 +444,8 @@ public partial class PlayerActivity
         {
             // On the touch screen a profile can also be renamed.
             new AlertDialog.Builder(this)
-                .SetTitle("Perfil «" + name + "»")!
-                .SetItems(["Usar en esta carpeta", "Renombrar…"], (_, e) =>
+                .SetTitle(F("Profile “{0}”", name))!
+                .SetItems([T("Use in this folder"), T("Rename…")], (_, e) =>
                 {
                     if (e.Which == 0) ApplyProfileToFolder(item, name);
                     else RenameProfile(item, name);
@@ -424,7 +459,7 @@ public partial class PlayerActivity
     private void ApplyProfileToFolder(MediaItem item, string name)
     {
         _store.SetFolder(item, new FolderEntry { Profile = name });
-        Toast.MakeText(this, $"La carpeta usa el perfil «{name}» (videos sin etiquetas en el nombre)", ToastLength.Short)!.Show();
+        Toast.MakeText(this, F("The folder uses the profile “{0}” (videos without tags in their name)", name), ToastLength.Short)!.Show();
         RefreshFormat();
         RefreshUi();
     }
@@ -434,16 +469,16 @@ public partial class PlayerActivity
         var input = new EditText(this) { Text = name };
         input.SetSingleLine(true);
         new AlertDialog.Builder(this)
-            .SetTitle("Nuevo nombre del perfil")!
+            .SetTitle(T("New profile name"))!
             .SetView(input)!
-            .SetPositiveButton("Guardar", (_, _) =>
+            .SetPositiveButton(T("Save"), (_, _) =>
             {
                 if (!_store.RenameProfile(item, name, input.Text ?? ""))
-                    Toast.MakeText(this, "Ese nombre ya existe o está vacío", ToastLength.Short)!.Show();
+                    Toast.MakeText(this, T("That name already exists or is empty"), ToastLength.Short)!.Show();
                 RefreshFormat();
                 RefreshUi();
             })!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 
@@ -454,7 +489,7 @@ public partial class PlayerActivity
         _store.DeleteProfile(item, names[index]);
         _state = _store.Get(item);
         RefreshFormat();
-        Toast.MakeText(this, $"Perfil «{names[index]}» borrado (quien lo usaba conserva su formato)", ToastLength.Short)!.Show();
+        Toast.MakeText(this, F("Profile “{0}” deleted (whatever used it keeps its format)", names[index]), ToastLength.Short)!.Show();
     }
 
     private void ClearVideoData()
@@ -464,7 +499,7 @@ public partial class PlayerActivity
         _store.Save(item, _state, flush: true);
         RefreshFormat();
         SpotsChanged();
-        Toast.MakeText(this, "Datos de este video borrados", ToastLength.Short)!.Show();
+        Toast.MakeText(this, T("This video's data deleted"), ToastLength.Short)!.Show();
     }
 
     // ---- Spots ----
@@ -475,20 +510,20 @@ public partial class PlayerActivity
         long pos = Position;
         if (!SpotList.Add(_state.Spots, pos))
         {
-            Toast.MakeText(this, "Ya hay una marca aquí", ToastLength.Short)!.Show();
+            Toast.MakeText(this, T("There is already a bookmark here"), ToastLength.Short)!.Show();
             return;
         }
         SaveVideoState();
         SpotsChanged();
         // Show the page that contains the new spot.
         _spotPage = Array.IndexOf(_spots, pos) / Core.SpotsModel.PerPage;
-        Toast.MakeText(this, "Marca en " + MediaUtil.FormatTime(pos), ToastLength.Short)!.Show();
+        Toast.MakeText(this, F("Bookmark at {0}", MediaUtil.FormatTime(pos)), ToastLength.Short)!.Show();
     }
 
     private void JumpToSpot(long? spot, string noneMessage)
     {
         if (spot is { } ms) SeekTo(ms);
-        else Toast.MakeText(this, _state.Spots.Count == 0 ? "Aún no hay marcas" : noneMessage, ToastLength.Short)!.Show();
+        else Toast.MakeText(this, _state.Spots.Count == 0 ? T("No bookmarks yet") : noneMessage, ToastLength.Short)!.Show();
     }
 
     /// <summary>A spot thumbnail was chosen: jump to it, or delete it in delete mode.</summary>
@@ -504,7 +539,7 @@ public partial class PlayerActivity
             SpotsChanged();
             _spotPage = Math.Min(_spotPage, SpotsModel().PageCount - 1);
             if (_state.Spots.Count == 0) _spotDeleteMode = false;
-            Toast.MakeText(this, "Marca borrada (" + MediaUtil.FormatTime(ms) + ")", ToastLength.Short)!.Show();
+            Toast.MakeText(this, F("Bookmark deleted ({0})", MediaUtil.FormatTime(ms)), ToastLength.Short)!.Show();
             return;
         }
         SeekTo(ms);
@@ -521,9 +556,9 @@ public partial class PlayerActivity
         var input = new EditText(this) { Text = _state.SpotNames.GetValueOrDefault(at, "") };
         input.SetSingleLine(true);
         new AlertDialog.Builder(this)
-            .SetTitle("Nombre de la marca en " + MediaUtil.FormatTime(at))!
+            .SetTitle(F("Bookmark name at {0}", MediaUtil.FormatTime(at)))!
             .SetView(input)!
-            .SetPositiveButton("Guardar", (_, _) =>
+            .SetPositiveButton(T("Save"), (_, _) =>
             {
                 if (near is null) SpotList.Add(_state.Spots, at);
                 string name = (input.Text ?? "").Trim();
@@ -533,7 +568,7 @@ public partial class PlayerActivity
                 SpotsChanged();
                 RefreshUi();
             })!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 
@@ -597,8 +632,8 @@ public partial class PlayerActivity
             {
                 var t = infos[i];
                 string lang = t.Language is { Length: > 0 } l && l != "und" ? new CultureInfo(l).NativeName : "";
-                if (t.TrackType == MediaTrackType.Audio) audio.Add((i, lang.Length > 0 ? lang : $"Pista {audio.Count + 1}"));
-                else if (t.TrackType == MediaTrackType.Timedtext) subs.Add((i, lang.Length > 0 ? lang : $"Subtítulos {subs.Count + 1}"));
+                if (t.TrackType == MediaTrackType.Audio) audio.Add((i, lang.Length > 0 ? lang : F("Track {0}", audio.Count + 1)));
+                else if (t.TrackType == MediaTrackType.Timedtext) subs.Add((i, lang.Length > 0 ? lang : F("Subtitles {0}", subs.Count + 1)));
             }
             // Files added with AddTimedTextSource come last, in the order they were added.
             int embedded = subs.Count - _addedSubtitleFiles.Count;
@@ -649,7 +684,7 @@ public partial class PlayerActivity
             _player.SelectTrack(_audioTracks[index].Index);
             _selectedAudio = index;
         }
-        catch (Java.Lang.Exception ex) { Toast.MakeText(this, "No se pudo cambiar el audio: " + ex.Message, ToastLength.Short)!.Show(); }
+        catch (Java.Lang.Exception ex) { Toast.MakeText(this, F("Could not change the audio: {0}", ex.Message), ToastLength.Short)!.Show(); }
     }
 
     private void SelectSubtitle(int index)
@@ -667,7 +702,7 @@ public partial class PlayerActivity
                 _selectedSubtitle = index;
             }
         }
-        catch (Java.Lang.Exception ex) { Toast.MakeText(this, "No se pudieron cambiar los subtítulos: " + ex.Message, ToastLength.Short)!.Show(); }
+        catch (Java.Lang.Exception ex) { Toast.MakeText(this, F("Could not change the subtitles: {0}", ex.Message), ToastLength.Short)!.Show(); }
     }
 
     private void OnTimedText(string? text)
@@ -704,7 +739,7 @@ public partial class PlayerActivity
         string? currentTree = Current is { } c ? MediaUtil.TreeOf(c.Location) : null;
         if (currentTree is not null && !lib.Trees.Contains(currentTree)) lib.Trees.Insert(0, currentTree);
         if (_settings.Bookmarks.Videos.Count > 0) lib.Trees.Insert(0, WebFolder);
-        lib.Names = lib.Trees.Select(t => t == WebFolder ? "★ Videos web" : FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
+        lib.Names = lib.Trees.Select(t => t == WebFolder ? T("★ Web videos") : FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
         // Start with the playing list itself.
         lib.Folder = currentTree is not null ? lib.Trees.IndexOf(currentTree) : Current is { IsRemote: true } ? lib.Trees.IndexOf(WebFolder) : -1;
         lib.Items = _playlist.Items.ToList();
@@ -798,8 +833,8 @@ public partial class PlayerActivity
             long d = _libThumbs.Duration(item.Location);
             var parts = new List<string>();
             if (d > 0) parts.Add(MediaUtil.FormatTime(d));
-            if (st.Spots.Count > 0) parts.Add(st.Spots.Count == 1 ? "1 marca" : $"{st.Spots.Count} marcas");
-            else if (st.PositionMs == 0) parts.Add("nuevo");
+            if (st.Spots.Count > 0) parts.Add(BookmarkCount(st.Spots.Count));
+            else if (st.PositionMs == 0) parts.Add(T("new"));
             if (st.Cuts.Count > 0) parts.Add("✂ " + st.Cuts.Count);
             if (item.IsRemote) parts.Add("web");
             string name = item.Name[(item.Name.LastIndexOf('/') + 1)..];
@@ -807,7 +842,8 @@ public partial class PlayerActivity
                 f.ShortLabel, string.Join(" · ", parts), Progress(item, st), item.Location == Current?.Location);
         }).ToArray();
         return new LibraryModel(lib.Names, Math.Max(0, lib.Folder), lib.Filter, lib.Sort, lib.Page, pages, lib.View.Count,
-            entries, _settings.LastVideoName, _playlist.Shuffle, _playlist.Repeat, lib.Loading, _libThumbs.Version);
+            entries, _settings.LastVideoName, _playlist.Shuffle, _playlist.Repeat, lib.Loading, _libThumbs.Version,
+            _settings.IncludeSubfolders);
     }
 
     private void PlayFromLibrary(int slot)
@@ -832,7 +868,7 @@ public partial class PlayerActivity
         }
         // A saved web video keeps its page and remembered state.
         var web = WebBookmarkItems.All(_settings.Bookmarks).FirstOrDefault(i => i.Location == uri);
-        PlayItems([web ?? new MediaItem(uri, _settings.LastVideoName ?? "video")], 0);
+        PlayItems([web ?? new MediaItem(uri, _settings.LastVideoName ?? T("video"))], 0);
     }
 
     // ---- Info ----
@@ -844,50 +880,50 @@ public partial class PlayerActivity
         var rows = new List<string>();
         void Row(string key, string value) { rows.Add(key); rows.Add(value); }
         string name = item?.Name ?? "";
-        Row("Archivo", name);
+        Row(T("File"), name);
         if (item is { IsRemote: true })
         {
-            Row("Origen", "video web · " + (System.Uri.TryCreate(item.Location, UriKind.Absolute, out var u) ? u.Host : ""));
-            if (item.PageUrl is { } page) Row("Página", page);
-            Row("Video", $"{_videoWidth}×{_videoHeight} · {MediaUtil.FormatTime(Duration)}");
+            Row(T("Source"), F("web video · {0}", System.Uri.TryCreate(item.Location, UriKind.Absolute, out var u) ? u.Host : ""));
+            if (item.PageUrl is { } page) Row(T("Page"), page);
+            Row(T("Video"), $"{_videoWidth}×{_videoHeight} · {MediaUtil.FormatTime(Duration)}");
         }
-        else if (f is null) Row("Leyendo", "información del archivo…");
+        else if (f is null) Row(T("Reading"), T("file information…"));
         else
         {
-            Row("Tamaño", $"{FormatBytes(f.SizeBytes)} · {MediaUtil.FormatTime(f.DurationMs > 0 ? f.DurationMs : Duration)}");
+            Row(T("Size"), $"{FormatBytes(f.SizeBytes)} · {MediaUtil.FormatTime(f.DurationMs > 0 ? f.DurationMs : Duration)}");
             string depth = f.BitDepth > 8 ? $" {f.BitDepth} bit" : "";
             int w = f.Width > 0 ? f.Width : _videoWidth, h = f.Height > 0 ? f.Height : _videoHeight;
-            Row("Video", $"{w}×{h} · {(f.FrameRate > 0 ? f.FrameRate.ToString("0.##", CultureInfo.InvariantCulture) + " fps" : "? fps")} · {f.Codec}{depth}");
-            if (f.Bitrate > 0) Row("Velocidad", $"{f.Bitrate / 1e6:0.0} Mb/s");
-            Row("Decodificador", f.Decoder.Length == 0 ? "ninguno encontrado: el teléfono quizá no puede con este video"
-                : (f.HardwareDecoder ? "hardware ✓ (" : "software, puede ir lento (") + f.Decoder + ")");
-            Row("Cuadros mostrados", $"{_renderer.VideoFps:0.#} por segundo" + (f.FrameRate > 0 ? $" de {f.FrameRate:0.#}" : ""));
-            Row("Metadatos VR", f.Spherical is { } s ? SphericalText(s) : "no tiene");
+            Row(T("Video"), $"{w}×{h} · {(f.FrameRate > 0 ? f.FrameRate.ToString("0.##", CultureInfo.InvariantCulture) + " fps" : "? fps")} · {f.Codec}{depth}");
+            if (f.Bitrate > 0) Row(T("Bitrate"), $"{f.Bitrate / 1e6:0.0} Mb/s");
+            Row(T("Decoder"), f.Decoder.Length == 0 ? T("none found: this phone may not be able to play this video")
+                : f.HardwareDecoder ? F("hardware ✓ ({0})", f.Decoder) : F("software, may be slow ({0})", f.Decoder));
+            Row(T("Frames shown"), f.FrameRate > 0 ? F("{0:0.#} per second of {1:0.#}", _renderer.VideoFps, f.FrameRate) : F("{0:0.#} per second", _renderer.VideoFps));
+            Row(T("VR metadata"), f.Spherical is { } s ? SphericalText(s) : T("none"));
         }
         var cf = CurrentFormat;
-        string coverage = cf.IsEquirect ? $", cobertura {cf.EquirectHFov:0}°×{cf.EquirectVFov:0}°"
-            : cf.Projection == Projection.Fisheye ? $", lente {cf.FisheyeFov:0}° {Core.Params.LensLabel(cf.Lens)}" : "";
-        Row("Formato", $"{cf.ShortLabel}{coverage}" + (cf.NadirDeg > 0 ? $", tapa {cf.NadirDeg:0}°" : ""));
-        Row("De dónde sale", _choice.Candidates.First(c => c.Used).Text);
-        Row("Horizonte", _state.HasHorizon ? $"nivel {_state.Roll:+0.0;-0.0}°, inclinación {_state.Pitch:+0.0;-0.0}°, giro {_state.Yaw:+0;-0}°" : "sin corrección");
-        Row("Marcas", _spots.Length == 0 ? "ninguna" : $"{_spots.Length} · " + string.Join(", ", _spots.Take(6).Select(MediaUtil.FormatTime)));
+        string coverage = cf.IsEquirect ? F(", coverage {0:0}°×{1:0}°", cf.EquirectHFov, cf.EquirectVFov)
+            : cf.Projection == Projection.Fisheye ? F(", lens {0:0}° {1}", cf.FisheyeFov, Core.Params.LensLabel(cf.Lens)) : "";
+        Row(T("Format"), $"{cf.ShortLabel}{coverage}" + (cf.NadirDeg > 0 ? F(", cover {0:0}°", cf.NadirDeg) : ""));
+        Row(T("Comes from"), _choice.Candidates.First(c => c.Used).Text);
+        Row(T("Horizon"), _state.HasHorizon ? F("level {0:+0.0;-0.0}°, tilt {1:+0.0;-0.0}°, turn {2:+0;-0}°", _state.Roll, _state.Pitch, _state.Yaw) : T("no correction"));
+        Row(T("Bookmarks"), _spots.Length == 0 ? T("no bookmarks") : $"{_spots.Length} · " + string.Join(", ", _spots.Take(6).Select(MediaUtil.FormatTime)));
         if (_cuts.Length > 0)
-            Row("Cortes", $"{_cuts.Length} · se quitan {MediaUtil.FormatTime(CutList.RemovedMs(_cuts))}" +
-                (_cutsStale ? " · ⚠ de otra versión del archivo" : _settings.SkipCuts ? " · se saltan" : " · se ven"));
-        Row("Guardado en", item is null ? "" : _store.StorageText(item));
-        Row("Sensor", Windows.TrackingText(_tracker.Status));
+            Row(T("Cuts"), F("{0} · {1} removed", _cuts.Length, MediaUtil.FormatTime(CutList.RemovedMs(_cuts))) + " · " +
+                (_cutsStale ? T("⚠ from another version of the file") : _settings.SkipCuts ? T("skipped") : T("shown")));
+        Row(T("Saved in"), item is null ? "" : _store.StorageText(item));
+        Row(T("Sensor"), Windows.TrackingText(_tracker.Status));
         return rows.ToArray();
     }
 
     private static string SphericalText(SphericalInfo s)
     {
-        string stereo = s.Stereo switch { StereoMode.SideBySide => "lado a lado", StereoMode.TopBottom => "arriba-abajo", StereoMode.Mono => "2D", _ => "?" };
+        string stereo = s.Stereo switch { StereoMode.SideBySide => T("side by side"), StereoMode.TopBottom => T("top-bottom"), StereoMode.Mono => "2D", _ => "?" };
         string projection = s.Projection switch
         {
             SphericalProjection.Equirect => $"equirectangular {s.HorizontalCoverageDeg:0}°×{s.VerticalCoverageDeg:0}°",
             SphericalProjection.Cubemap => "cubemap",
-            SphericalProjection.Mesh => s.LeftMesh is null ? "malla (no se pudo leer)" : "malla incrustada (VR180)",
-            _ => "solo estéreo",
+            SphericalProjection.Mesh => s.LeftMesh is null ? T("mesh (could not be read)") : T("embedded mesh (VR180)"),
+            _ => T("stereo only"),
         };
         return $"{projection}, {stereo}";
     }

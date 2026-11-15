@@ -39,10 +39,10 @@ public partial class PlayerActivity
         int i = _windows.IndexOf(_editMode ? WindowKind.Spots : WindowKind.Cuts);
         if (i >= 0) _windows[i] = _editMode ? WindowKind.Cuts : WindowKind.Spots;
         string text = _editMode
-            ? "✂ Modo edición: marca las partes a quitar. Se cortan en la computadora con VrCut."
-            : "Modo visión" + (_state.Cuts.Count > 0 && _settings.SkipCuts ? ": las partes marcadas se saltan" : "");
+            ? T("✂ Edit mode: mark the parts to remove. They are cut on the computer with VrCut.")
+            : _state.Cuts.Count > 0 && _settings.SkipCuts ? T("Watch mode: marked parts are skipped") : T("Watch mode");
         if (_editMode && _stateItem is { } item && (item.IsRemote || MediaUtil.TreeOf(item.Location) is null))
-            text += " (este video no está en una carpeta elegida: VrCut no verá los cortes)";
+            text += " " + T("(this video is not in a chosen folder: VrCut will not see the cuts)");
         Toast.MakeText(this, text, ToastLength.Long)!.Show();
     }
 
@@ -54,7 +54,7 @@ public partial class PlayerActivity
         if (_cutStart < 0)
         {
             _cutStart = pos;
-            Toast.MakeText(this, $"Corte desde {MediaUtil.FormatTime(pos)}: ve al final de la parte y pulsa «✂ Fin del corte»", ToastLength.Short)!.Show();
+            Toast.MakeText(this, F("Cut from {0}: go to the end of the part and press “✂ Cut end”", MediaUtil.FormatTime(pos)), ToastLength.Short)!.Show();
             return;
         }
         long start = _cutStart;
@@ -71,12 +71,12 @@ public partial class PlayerActivity
             // Old cuts of another version of the file cannot be mixed with new ones.
             _state.Cuts.Clear();
             _cutsStale = false;
-            Toast.MakeText(this, "Se borraron los cortes viejos (eran de otra versión del archivo)", ToastLength.Short)!.Show();
+            Toast.MakeText(this, T("Old cuts deleted (they were from another version of the file)"), ToastLength.Short)!.Show();
         }
         bool first = _state.Cuts.Count == 0;
         if (!CutList.Add(_state.Cuts, a, b, duration))
         {
-            Toast.MakeText(this, "La parte marcada es demasiado corta", ToastLength.Short)!.Show();
+            Toast.MakeText(this, T("The marked part is too short"), ToastLength.Short)!.Show();
             return;
         }
         if (first || _state.CutsDurationMs <= 0) _state.CutsDurationMs = duration;
@@ -85,13 +85,13 @@ public partial class PlayerActivity
         long from = Math.Min(a, b), to = Math.Min(Math.Max(a, b), duration > 0 ? duration : long.MaxValue);
         int index = CutList.IndexAt(_state.Cuts, from);
         if (index >= 0) _cutPage = index / EditModel.PerPage;
-        Toast.MakeText(this, $"✂ Se quitará {MediaUtil.FormatTime(from)} → {MediaUtil.FormatTime(to)}", ToastLength.Short)!.Show();
+        Toast.MakeText(this, F("✂ {0} → {1} will be removed", MediaUtil.FormatTime(from), MediaUtil.FormatTime(to)), ToastLength.Short)!.Show();
     }
 
     private void JumpToCut(CutRange? cut, string noneMessage)
     {
         if (cut is { } c) SeekTo(c.FromMs);
-        else Toast.MakeText(this, _state.Cuts.Count == 0 ? "Aún no hay cortes" : noneMessage, ToastLength.Short)!.Show();
+        else Toast.MakeText(this, _state.Cuts.Count == 0 ? T("No cuts yet") : noneMessage, ToastLength.Short)!.Show();
     }
 
     /// <summary>A cut thumbnail was chosen: jump to its start, or delete it in delete mode.</summary>
@@ -106,7 +106,7 @@ public partial class PlayerActivity
             SaveVideoState();
             SpotsChanged();
             _cutPage = Math.Min(_cutPage, Math.Max(0, (_state.Cuts.Count - 1) / EditModel.PerPage));
-            Toast.MakeText(this, $"Corte borrado ({MediaUtil.FormatTime(cut.FromMs)} → {MediaUtil.FormatTime(cut.ToMs)})", ToastLength.Short)!.Show();
+            Toast.MakeText(this, F("Cut deleted ({0} → {1})", MediaUtil.FormatTime(cut.FromMs), MediaUtil.FormatTime(cut.ToMs)), ToastLength.Short)!.Show();
             return;
         }
         SeekTo(cut.FromMs);
@@ -124,11 +124,11 @@ public partial class PlayerActivity
             case MenuAction.CutCancel: _cutStart = -1; break;
             case MenuAction.CutToHere: AddCut(0, Position); break;
             case MenuAction.CutFromHere: AddCut(Position, Duration); break;
-            case MenuAction.CutPrev: JumpToCut(CutList.Previous(_state.Cuts, Position), "No hay cortes antes"); break;
-            case MenuAction.CutNext: JumpToCut(CutList.Next(_state.Cuts, Position), "No hay cortes después"); break;
+            case MenuAction.CutPrev: JumpToCut(CutList.Previous(_state.Cuts, Position), T("No cuts before this point")); break;
+            case MenuAction.CutNext: JumpToCut(CutList.Next(_state.Cuts, Position), T("No cuts after this point")); break;
             case MenuAction.CutSkip:
                 _settings.SkipCuts = !_settings.SkipCuts;
-                Toast.MakeText(this, _settings.SkipCuts ? "Las partes marcadas se saltan al reproducir" : "Las partes marcadas se ven", ToastLength.Short)!.Show();
+                Toast.MakeText(this, _settings.SkipCuts ? T("Marked parts are skipped during playback") : T("Marked parts are shown"), ToastLength.Short)!.Show();
                 break;
             case MenuAction.CutPagePrev: _cutPage = Math.Max(0, _cutPage - 1); break;
             case MenuAction.CutPageNext: _cutPage = Math.Min(Math.Max(0, (_cuts.Length - 1) / EditModel.PerPage), _cutPage + 1); break;
@@ -158,7 +158,7 @@ public partial class PlayerActivity
         }
         SeekTo(to);
         if (!_editMode || TopWindow is null)
-            Toast.MakeText(this, $"⏭ Parte marcada para cortar (hasta {MediaUtil.FormatTime(to)})", ToastLength.Short)!.Show();
+            Toast.MakeText(this, F("⏭ Skipped a part marked for cutting (to {0})", MediaUtil.FormatTime(to)), ToastLength.Short)!.Show();
     }
 
     /// <summary>Where to start a video: past a marked part that contains the start (e.g. the intro).</summary>
@@ -167,7 +167,7 @@ public partial class PlayerActivity
         _cutsStale = _state.Cuts.Count > 0 && !CutList.BelongsTo(_state.CutsDurationMs, duration);
         if (_cutsStale)
         {
-            Toast.MakeText(this, "Los cortes de este video son de otra versión del archivo (cambió su duración): no se saltan", ToastLength.Long)!.Show();
+            Toast.MakeText(this, T("This video's cuts are from another version of the file (its length changed): they are not skipped"), ToastLength.Long)!.Show();
             return start;
         }
         if (!_settings.SkipCuts) return start;
@@ -214,9 +214,9 @@ public partial class PlayerActivity
     private void UpdateOverlayMode()
     {
         if (_editButton is null) return;
-        _editButton.Text = _editMode ? "✓ Terminar edición" : "✂ Editar";
-        _cutButton!.Text = _cutStart >= 0 ? "✂ Fin del corte" : "✂ Inicio de corte";
-        _skipButton!.Text = _settings.SkipCuts ? "Saltar cortes: sí" : "Saltar cortes: no";
+        _editButton.Text = _editMode ? T("✓ Finish editing") : T("✂ Edit");
+        _cutButton!.Text = _cutStart >= 0 ? T("✂ Cut end") : T("✂ Cut start");
+        _skipButton!.Text = _settings.SkipCuts ? T("Skip cuts: on") : T("Skip cuts: off");
         if (_overlayEditMode == _editMode) return;
         _overlayEditMode = _editMode;
         foreach (var v in _viewModeButtons) v.Visibility = _editMode ? Android.Views.ViewStates.Gone : Android.Views.ViewStates.Visible;

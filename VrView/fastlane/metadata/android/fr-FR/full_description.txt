@@ -1,0 +1,37 @@
+VrView transforme votre téléphone et un simple casque VR en cinéma personnel pour les vidéos que vous possédez déjà. Choisissez un dossier et il devient une playlist : glissez le téléphone dans le casque et regardez, sans compte et sans publicité.
+
+VrView est gratuit et entièrement débloqué. Toutes les fonctions sont incluses. S'il vous plaît, un bouton facultatif à paiement unique permet de m'offrir une bière.
+
+DES PLAYLISTS PAR DOSSIER
+• Choisissez n'importe quel dossier, avec ou sans sous-dossiers, et lisez-le dans l'ordre naturel
+• Lecture aléatoire, répéter tout ou répéter une vidéo
+• Une bibliothèque dans le casque, avec miniatures, filtres et tri, pour changer de vidéo sans l'enlever
+• Reprend là où vous vous étiez arrêté, vidéo par vidéo
+
+LES FORMATS QUE VOUS UTILISEZ VRAIMENT
+• Plat, 180°, 360°, fisheye, cubemap EAC, cubemap 3×2 et maillage intégré des caméras VR180
+• Mono, côte à côte, haut-bas et yeux inversés
+• Détection automatique par les métadonnées VR du fichier, les balises de son nom (comme _180_LR) ou ses proportions
+• Un éditeur de format complet pour les caméras hors norme : couverture, angle de l'objectif, centre et taille du cercle
+• Enregistrez un format comme profil et utilisez-le pour tout un dossier
+
+CONÇU POUR LES CASQUES À TÉLÉPHONE
+• Suivi anti-dérive, pour que l'image reste devant vous
+• Scannez le code QR de votre casque pour charger ses lentilles, ou utilisez l'assistant de calibrage en 3 étapes
+• Correction de la distorsion des lentilles et écart réglable
+• Regardez un bouton pour l'activer, ou utilisez le bouton du casque, une manette Bluetooth ou un clavier
+• Redressez avec la tête l'horizon d'une vidéo penchée
+
+ET AUSSI
+• Repères avec miniatures et noms
+• Choix de la piste audio et des sous-titres, y compris les fichiers .srt à côté de la vidéo
+• Informations techniques : codec, résolution, images par seconde et décodage matériel ou logiciel
+• Vue écran sans casque : faites glisser pour regarder autour de vous et pincez pour zoomer
+• Présent dans « Ouvrir avec » des galeries et des gestionnaires de fichiers
+• Disponible en français, anglais, espagnol et allemand
+
+VOS VIDÉOS RESTENT À VOUS
+VrView n'a pas besoin de l'autorisation de stockage : vous donnez accès uniquement aux dossiers que vous choisissez. Pas de compte, pas de publicité, pas d'analyse. Vos réglages sont enregistrés sur votre appareil, dans un petit fichier vrview.json à l'intérieur de chaque dossier, et survivent donc à une réinstallation.
+
+BON À SAVOIR
+VrView lit les fichiers vidéo enregistrés sur votre appareil ; il ne contient aucune vidéo ni service de streaming. Les résolutions lues avec fluidité dépendent du décodeur vidéo de votre téléphone. Le suivi de la tête nécessite un gyroscope ; sans gyroscope, faites glisser le doigt pour regarder autour de vous. Nécessite Android 8.0 ou version ultérieure.

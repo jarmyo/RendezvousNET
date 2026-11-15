@@ -26,8 +26,10 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         void OnMenuRequested();
         /// <summary>Called on the GL thread when "set horizon with the head" captured a new correction (degrees).</summary>
         void OnHorizonCaptured(float pitch, float roll, float yaw);
-        /// <summary>Called on the GL thread when the capture was cancelled or timed out.</summary>
-        void OnHorizonCaptureCancelled();
+        /// <summary>Called on the GL thread when "recenter with your head" fixed the new center.</summary>
+        void OnCenterCaptured();
+        /// <summary>Called on the GL thread when a capture was cancelled or timed out.</summary>
+        void OnCaptureCancelled(bool centering);
     }
 
     private const float SphereRadius = 50f;
@@ -72,6 +74,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
 
     // GL resources
     private int _videoProgram, _videoProgramHq, _texProgram, _reticleProgram, _distortProgram;
+    private int _centerGuideTexture;
     private int _oesTexture, _panelTexture, _guideTexture, _nadirTexture, _prevTexture, _nextTexture, _reticleVbo;
     private int _previewTexture, _crossLeftTexture, _crossRightTexture, _gridTexture, _subtitleTexture;
     private int _fbo, _fboTexture, _fboWidth, _fboHeight;
@@ -118,8 +121,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     private float _edgeRefYaw, _edgeRefPitch;
     private bool _edgeRefSet;
 
-    // "Set horizon with the head"
-    private bool _capturing;
+    // "Set horizon with the head" and "recenter with your head" (_centering)
+    private bool _capturing, _centering;
     private float _captureSeconds;
     private readonly StillnessDetector _stillness = new();
     /// <summary>Freshly captured horizon, used until the UI thread pushes it back in <see cref="Config"/>.</summary>
@@ -146,17 +149,28 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     /// </summary>
     public void StartHorizonCapture()
     {
+        _centering = false;
         _capturing = true;
         Capturing = true;
         _captureSeconds = 0;
         _stillness.Reset();
     }
 
+    /// <summary>
+    /// Starts "recenter with your head": a cross follows the head and, once the head is held still,
+    /// the direction it points to becomes the front of the video, sideways and up/down. GL thread.
+    /// </summary>
+    public void StartCenterCapture()
+    {
+        StartHorizonCapture();
+        _centering = true;
+    }
+
     private void CancelHorizonCapture()
     {
         _capturing = false;
         Capturing = false;
-        _host.OnHorizonCaptureCancelled();
+        _host.OnCaptureCancelled(_centering);
     }
 
     /// <summary>Viewer button / screen tap: open the menu, or click what the reticle points at. GL thread.</summary>
@@ -213,7 +227,9 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             GLES20.GlBindTexture(GLES20.GlTexture2d, t);
             SetLinearClamp(GLES20.GlTexture2d);
         }
+        _centerGuideTexture = tex[11];
         Upload(_guideTexture, MenuPainter.PaintHorizonGuide());
+        Upload(_centerGuideTexture, MenuPainter.PaintCenterGuide());
         Upload(_nadirTexture, MenuPainter.PaintNadirPatch());
         Upload(_prevTexture, MenuPainter.PaintEdgeButton(false));
         Upload(_nextTexture, MenuPainter.PaintEdgeButton(true));
@@ -395,7 +411,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             }
             else if (_capturing)
             {
-                DrawTextured(_guideMesh!, _guideTexture, menuProj, 1f);
+                DrawTextured(_guideMesh!, _centering ? _centerGuideTexture : _guideTexture, menuProj, 1f);
                 DrawReticle(menuProj, _stillness.Progress, _stillness.Progress > 0);
             }
             else if (_hoveredEdge != MenuAction.None)
@@ -505,6 +521,19 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         _captureSeconds += dt;
         if (_captureSeconds > HorizonCaptureTimeoutSeconds) { CancelHorizonCapture(); return; }
         if (!_stillness.Update(VrMath.Forward(view), VrMath.Up(view), dt)) return;
+
+        if (_centering)
+        {
+            // Same as an explicit recenter, aimed at whatever the head settled on.
+            var forward = VrMath.Forward(view);
+            _recenterYaw = VrMath.YawOf(forward);
+            _recenterPitch = VrMath.PitchOf(forward);
+            _edgeRefSet = false;
+            _capturing = false;
+            Capturing = false;
+            _host.OnCenterCaptured();
+            return;
+        }
 
         var (p, r, y) = VrMath.HorizonFromView(cfg.Pitch, cfg.Roll, cfg.Yaw, _recenterYaw, view, _recenterPitch);
         p = Math.Clamp(p, -90f, 90f);

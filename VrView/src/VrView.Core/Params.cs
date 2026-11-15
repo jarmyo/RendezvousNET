@@ -12,8 +12,9 @@ public enum Param
 }
 
 /// <summary>Range, step and standard value of a <see cref="Param"/>, in the units shown to the user.</summary>
-public readonly record struct ParamSpec(string Label, float Min, float Max, float Step, float Standard, string Unit)
+public readonly record struct ParamSpec(string Name, float Min, float Max, float Step, float Standard, string Unit)
 {
+    public string Label => T(Name);
     public float Clamp(float v) => Math.Clamp(MathF.Round(v / Step) * Step, Min, Max);
     public float Fraction(float v) => Max > Min ? Math.Clamp((v - Min) / (Max - Min), 0f, 1f) : 0f;
     public float FromFraction(float f) => Clamp(Min + f * (Max - Min));
@@ -30,20 +31,20 @@ public static class Params
 {
     private static readonly Dictionary<Param, ParamSpec> Specs = new()
     {
-        [Param.HFov] = new("Cobertura horizontal", 90, 360, 5, 180, "°"),
-        [Param.VFov] = new("Cobertura vertical", 60, 180, 5, 180, "°"),
-        [Param.LensFov] = new("Ángulo del lente", 120, 280, 5, 190, "°"),
-        [Param.CenterX] = new("Centro ← →", -25, 25, 0.5f, 0, " %"),
-        [Param.CenterY] = new("Centro ↓ ↑", -25, 25, 0.5f, 0, " %"),
-        [Param.Radius] = new("Tamaño del círculo", 50, 150, 1, 100, " %"),
-        [Param.Nadir] = new("Tamaño de la tapa", 10, 90, 5, 30, "°"),
-        [Param.Ipd] = new("Separación de lentes", -30, 30, 1, 0, ""),
-        [Param.Zoom] = new("Campo de visión", 40, 130, 5, 95, "°"),
-        [Param.MenuShift] = new("Separación del menú", -20, 20, 0.5f, 0, ""),
-        [Param.Opacity] = new("Opacidad", 30, 100, 10, 90, " %"),
-        [Param.DwellTime] = new("Tiempo de clic con la mirada", 0.6f, 3f, 0.2f, 1.4f, " s"),
-        [Param.EdgeAngle] = new("Ángulo de los botones ◀ ▶", 20, 70, 5, 40, "°"),
-        [Param.SubtitleSize] = new("Tamaño de subtítulos", 50, 200, 10, 100, " %"),
+        [Param.HFov] = new("Horizontal coverage", 90, 360, 5, 180, "°"),
+        [Param.VFov] = new("Vertical coverage", 60, 180, 5, 180, "°"),
+        [Param.LensFov] = new("Lens angle", 120, 280, 5, 190, "°"),
+        [Param.CenterX] = new("Center ← →", -25, 25, 0.5f, 0, " %"),
+        [Param.CenterY] = new("Center ↓ ↑", -25, 25, 0.5f, 0, " %"),
+        [Param.Radius] = new("Circle size", 50, 150, 1, 100, " %"),
+        [Param.Nadir] = new("Cover size", 10, 90, 5, 30, "°"),
+        [Param.Ipd] = new("Lens separation", -30, 30, 1, 0, ""),
+        [Param.Zoom] = new("Field of view", 40, 130, 5, 95, "°"),
+        [Param.MenuShift] = new("Menu separation", -20, 20, 0.5f, 0, ""),
+        [Param.Opacity] = new("Opacity", 30, 100, 10, 90, " %"),
+        [Param.DwellTime] = new("Gaze click time", 0.6f, 3f, 0.2f, 1.4f, " s"),
+        [Param.EdgeAngle] = new("◀ ▶ button angle", 20, 70, 5, 40, "°"),
+        [Param.SubtitleSize] = new("Subtitle size", 50, 200, 10, 100, " %"),
     };
 
     public static ParamSpec Spec(Param p) => Specs[p];
@@ -63,12 +64,12 @@ public static class Params
         _ => true,
     };
 
-    /// <summary>Why a parameter is dimmed, e.g. "solo ojo de pez".</summary>
+    /// <summary>Why a parameter is dimmed, e.g. "fisheye only".</summary>
     public static string NotApplicableReason(Param p) => p switch
     {
-        Param.HFov or Param.VFov => "solo 180° y 360°",
-        Param.LensFov or Param.CenterX or Param.CenterY or Param.Radius => "solo ojo de pez",
-        Param.Nadir => "no en videos planos",
+        Param.HFov or Param.VFov => T("180° and 360° only"),
+        Param.LensFov or Param.CenterX or Param.CenterY or Param.Radius => T("fisheye only"),
+        Param.Nadir => T("not on flat videos"),
         _ => "",
     };
 
@@ -114,8 +115,8 @@ public static class Params
     /// <summary>The fisheye lens types in the order the editor cycles them.</summary>
     public static string LensLabel(FisheyeLens lens) => lens switch
     {
-        FisheyeLens.Equisolid => "equisólida",
-        FisheyeLens.Stereographic => "estereográfica",
-        _ => "equidistante",
+        FisheyeLens.Equisolid => T("equisolid"),
+        FisheyeLens.Stereographic => T("stereographic"),
+        _ => T("equidistant"),
     };
 }

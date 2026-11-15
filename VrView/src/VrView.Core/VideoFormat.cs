@@ -149,10 +149,10 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
         return (cx - w * fw / 2, cy - h * fh / 2, cx + w * fw / 2, cy + h * fh / 2);
     }
 
-    /// <summary>Short user-facing (Spanish) label, e.g. "180° SBS".</summary>
-    public string Label => IsTuned ? $"{ShortLabel} · ajustado" : ShortLabel;
+    /// <summary>Short user-facing label, e.g. "180° SBS".</summary>
+    public string Label => IsTuned ? F("{0} · adjusted", ShortLabel) : ShortLabel;
 
-    /// <summary>Projection and eyes only, e.g. "Ojo de pez 190° SBS".</summary>
+    /// <summary>Projection and eyes only, e.g. "Fisheye 190° SBS".</summary>
     public string ShortLabel => $"{ProjectionLabel(Projection, FisheyeFov)} {EyesLabel}";
 
     public string EyesLabel => Stereo switch
@@ -164,13 +164,13 @@ public readonly record struct VideoFormat(Projection Projection, StereoMode Ster
 
     public static string ProjectionLabel(Projection projection, float fisheyeFov = 0) => projection switch
     {
-        Projection.Flat => "Plano",
+        Projection.Flat => T("Flat"),
         Projection.Dome180 => "180°",
         Projection.Sphere360 => "360°",
-        Projection.Fisheye => fisheyeFov > 0 ? $"Ojo de pez {fisheyeFov:0}°" : "Ojo de pez",
+        Projection.Fisheye => fisheyeFov > 0 ? F("Fisheye {0:0}°", fisheyeFov) : T("Fisheye"),
         Projection.Eac => "Cubemap EAC",
         Projection.Cubemap => "Cubemap",
-        Projection.Mesh => "Malla del archivo",
+        Projection.Mesh => T("File mesh"),
         _ => "?",
     };
 

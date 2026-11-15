@@ -20,7 +20,7 @@ public sealed record DetectedMedia(string Url, StreamKind Kind, string PageUrl, 
     public bool CanPlay => Kind != StreamKind.Dash;
     public bool CanDownload => Kind == StreamKind.File;
 
-    public string KindLabel => Kind switch { StreamKind.Hls => "HLS (stream)", StreamKind.Dash => "DASH (no compatible)", _ => "Archivo" };
+    public string KindLabel => Kind switch { StreamKind.Hls => T("HLS (stream)"), StreamKind.Dash => T("DASH (not supported)"), _ => T("File") };
 
     /// <summary>File name of the URL (without query), for display and format tags.</summary>
     public string FileName => MediaSniffer.FileName(Url);
@@ -90,7 +90,7 @@ public static class MediaSniffer
     public static string DisplayName(string mediaUrl, string? pageTitle)
     {
         string file = FileName(mediaUrl);
-        if (FormatDetector.HasTags(file) || string.IsNullOrWhiteSpace(pageTitle)) return file.Length > 0 ? file : "video web";
+        if (FormatDetector.HasTags(file) || string.IsNullOrWhiteSpace(pageTitle)) return file.Length > 0 ? file : T("web video");
         string ext = Path.GetExtension(file);
         string title = pageTitle!.Trim();
         return ext.Length is > 1 and <= 5 && !title.EndsWith(ext, StringComparison.OrdinalIgnoreCase) ? title + ext : title;

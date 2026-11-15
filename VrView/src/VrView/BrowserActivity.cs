@@ -142,7 +142,7 @@ public class BrowserActivity : Activity
         bar.AddView(SmallButton("⟳", (_, _) => _web.Reload()));
         _address = new EditText(this)
         {
-            Hint = "Dirección o búsqueda",
+            Hint = T("Address or search"),
             InputType = Android.Text.InputTypes.TextVariationUri | Android.Text.InputTypes.ClassText,
             ImeOptions = Android.Views.InputMethods.ImeAction.Go,
         };
@@ -157,15 +157,15 @@ public class BrowserActivity : Activity
             e.Handled = true;
         };
         bar.AddView(_address, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
-        bar.AddView(SmallButton("Ir", (_, _) => { Load(WebAddress.FromInput(_address.Text ?? "")); HideKeyboard(); }));
+        bar.AddView(SmallButton(T("Go"), (_, _) => { Load(WebAddress.FromInput(_address.Text ?? "")); HideKeyboard(); }));
         root.AddView(bar);
 
         var actions = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         actions.SetPadding(Dp(4), 0, Dp(4), 0);
-        _starButton = SmallButton("☆ Sitio", (_, _) => ToggleSiteBookmark());
+        _starButton = SmallButton(T("☆ Site"), (_, _) => ToggleSiteBookmark());
         _videosButton = SmallButton("", (_, _) => ShowVideos());
-        foreach (var b in new[] { _starButton, SmallButton("★ Favoritos", (_, _) => ShowFavorites()), _videosButton,
-                                  SmallButton("✕ Cerrar", (_, _) => Finish()) })
+        foreach (var b in new[] { _starButton, SmallButton(T("★ Favorites"), (_, _) => ShowFavorites()), _videosButton,
+                                  SmallButton(T("✕ Close"), (_, _) => Finish()) })
             actions.AddView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         root.AddView(actions);
 
@@ -223,9 +223,9 @@ public class BrowserActivity : Activity
     private void UpdateVideosButton()
     {
         int n = _media.Items.Count;
-        _videosButton.Text = n > 0 ? $"🎬 Videos ({n})" : "🎬 Videos";
+        _videosButton.Text = n > 0 ? F("🎬 Videos ({0})", n) : T("🎬 Videos");
         _videosButton.SetTextColor(n > 0 ? Color.Rgb(79, 195, 247) : Color.White);
-        _starButton.Text = _settings.Bookmarks.FindSite(_pageUrl) is not null ? "★ Sitio" : "☆ Sitio";
+        _starButton.Text = _settings.Bookmarks.FindSite(_pageUrl) is not null ? T("★ Site") : T("☆ Site");
     }
 
     // ---- Page events ----
@@ -308,10 +308,9 @@ public class BrowserActivity : Activity
         if (items.Count == 0)
         {
             new AlertDialog.Builder(this)
-                .SetTitle("No se encontraron videos")!
-                .SetMessage("Reproduce el video en la página (aunque sea unos segundos) y vuelve a pulsar «🎬 Videos». " +
-                            "Los videos con protección (DRM) no se pueden ver fuera del sitio.")!
-                .SetPositiveButton("Entendido", (_, _) => { })!
+                .SetTitle(T("No videos found"))!
+                .SetMessage(T("Play the video on the page (even for a few seconds) and press “🎬 Videos” again. Protected (DRM) videos cannot be watched outside the site."))!
+                .SetPositiveButton(T("Got it"), (_, _) => { })!
                 .Show();
             return;
         }
@@ -321,9 +320,9 @@ public class BrowserActivity : Activity
             return $"{m.KindLabel} · {m.FileName}\n{host}";
         }).ToArray();
         new AlertDialog.Builder(this)
-            .SetTitle("Videos de esta página")!
+            .SetTitle(T("Videos on this page"))!
             .SetItems(labels, (_, e) => VideoActions(items[e.Which]))!
-            .SetNegativeButton("Cerrar", (_, _) => { })!
+            .SetNegativeButton(T("Close"), (_, _) => { })!
             .Show();
     }
 
@@ -332,13 +331,13 @@ public class BrowserActivity : Activity
         var options = new List<(string Label, Action Run)>();
         if (media.CanPlay)
         {
-            options.Add(("▶ Ver en el visor de VrView", () => Play(media)));
-            options.Add(("★ Guardar en Videos web", () => SaveVideo(media)));
+            options.Add((T("▶ Watch in the VrView viewer"), () => Play(media)));
+            options.Add((T("★ Save to Web videos"), () => SaveVideo(media)));
         }
-        if (media.CanDownload) options.Add(("⬇ Descargar a Descargas/VrView", () => Download(media.Url, null, null)));
-        options.Add(("📋 Copiar el enlace", () => CopyLink(media.Url)));
+        if (media.CanDownload) options.Add((T("⬇ Download to Download/VrView"), () => Download(media.Url, null, null)));
+        options.Add((T("📋 Copy the link"), () => CopyLink(media.Url)));
         string title = media.CanPlay ? MediaSniffer.DisplayName(media.Url, _pageTitle)
-            : "DASH: el reproductor del sistema no puede con este formato";
+            : T("DASH: the system player cannot play this format");
         new AlertDialog.Builder(this)
             .SetTitle(title)!
             .SetItems(options.Select(o => o.Label).ToArray(), (_, e) => options[e.Which].Run())!
@@ -371,27 +370,27 @@ public class BrowserActivity : Activity
         var input = new EditText(this) { Text = MediaSniffer.DisplayName(media.Url, _pageTitle) };
         input.SetSingleLine(true);
         new AlertDialog.Builder(this)
-            .SetTitle("Nombre del video")!
-            .SetMessage("Las etiquetas de formato (180, 360, LR, TB…) en el nombre ayudan a mostrarlo bien.")!
+            .SetTitle(T("Video name"))!
+            .SetMessage(T("Format tags in the name (180, 360, LR, TB…) help show it correctly."))!
             .SetView(input)!
-            .SetPositiveButton("Guardar", (_, _) =>
+            .SetPositiveButton(T("Save"), (_, _) =>
             {
                 var bookmarks = _settings.Bookmarks;
                 int before = bookmarks.Videos.Count;
                 var saved = bookmarks.SaveVideo(media, input.Text ?? "", Java.Lang.JavaSystem.CurrentTimeMillis());
                 _settings.Bookmarks = bookmarks;
                 Toast.MakeText(this, bookmarks.Videos.Count > before
-                    ? $"Guardado «{saved.Title}»: está en «★ Videos web» y en la Biblioteca del visor"
-                    : $"Se renovó el enlace de «{saved.Title}»", ToastLength.Long)!.Show();
+                    ? F("Saved “{0}”: it is in “★ Web videos” and in the viewer's Library", saved.Title)
+                    : F("Link of “{0}” renewed", saved.Title), ToastLength.Long)!.Show();
             })!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 
     private void CopyLink(string url)
     {
         if (GetSystemService(ClipboardService) is ClipboardManager clipboard) clipboard.PrimaryClip = ClipData.NewPlainText("video", url);
-        Toast.MakeText(this, "Enlace copiado", ToastLength.Short)!.Show();
+        Toast.MakeText(this, T("Link copied"), ToastLength.Short)!.Show();
     }
 
     // ---- Downloads ----
@@ -420,11 +419,11 @@ public class BrowserActivity : Activity
             request.SetNotificationVisibility(DownloadVisibility.VisibleNotifyCompleted);
             request.SetDestinationInExternalPublicDir(Android.OS.Environment.DirectoryDownloads, "VrView/" + name);
             (GetSystemService(DownloadService) as DownloadManager)!.Enqueue(request);
-            Toast.MakeText(this, $"Descargando «{name}» en Descargas/VrView (elige esa carpeta en la lista para verlo)", ToastLength.Long)!.Show();
+            Toast.MakeText(this, F("Downloading “{0}” to Download/VrView (choose that folder in the list to watch it)", name), ToastLength.Long)!.Show();
         }
         catch (Exception ex) when (ex is Java.Lang.Exception or ArgumentException)
         {
-            Toast.MakeText(this, "No se pudo descargar: " + ex.Message, ToastLength.Long)!.Show();
+            Toast.MakeText(this, F("Could not download: {0}", ex.Message), ToastLength.Long)!.Show();
         }
     }
 
@@ -435,7 +434,7 @@ public class BrowserActivity : Activity
         var next = _afterPermission;
         _afterPermission = null;
         if (grantResults.Length > 0 && grantResults[0] == Permission.Granted) next?.Invoke();
-        else Toast.MakeText(this, "Sin permiso de almacenamiento no se puede guardar en Descargas", ToastLength.Long)!.Show();
+        else Toast.MakeText(this, T("Without storage permission nothing can be saved to Download"), ToastLength.Long)!.Show();
     }
 
     // ---- Favorites ----
@@ -446,7 +445,7 @@ public class BrowserActivity : Activity
         var bookmarks = _settings.Bookmarks;
         bool saved = bookmarks.ToggleSite(_pageUrl, _pageTitle);
         _settings.Bookmarks = bookmarks;
-        Toast.MakeText(this, saved ? "Sitio guardado en favoritos" : "Sitio quitado de favoritos", ToastLength.Short)!.Show();
+        Toast.MakeText(this, saved ? T("Site saved to favorites") : T("Site removed from favorites"), ToastLength.Short)!.Show();
         UpdateVideosButton();
     }
 
@@ -455,15 +454,15 @@ public class BrowserActivity : Activity
         var bookmarks = _settings.Bookmarks;
         var sites = bookmarks.Sites;
         var labels = sites.Select(s => s.Title + "\n" + s.Url).ToList();
-        labels.Add($"★ Videos web guardados ({bookmarks.Videos.Count})…");
+        labels.Add(F("★ Saved web videos ({0})…", bookmarks.Videos.Count));
         var dialog = new AlertDialog.Builder(this)
-            .SetTitle(sites.Count == 0 ? "Favoritos · guarda un sitio con «☆ Sitio»" : "Favoritos · mantén pulsado para borrar")!
+            .SetTitle(sites.Count == 0 ? T("Favorites · save a site with “☆ Site”") : T("Favorites · long-press to delete"))!
             .SetItems(labels.ToArray(), (_, e) =>
             {
                 if (e.Which < sites.Count) Load(sites[e.Which].Url);
                 else WebVideosDialog.Show(this, _settings, openPage: Load);
             })!
-            .SetNegativeButton("Cerrar", (_, _) => { })!
+            .SetNegativeButton(T("Close"), (_, _) => { })!
             .Create()!;
         dialog.Show();
         dialog.ListView!.ItemLongClick += (_, e) =>
@@ -473,7 +472,7 @@ public class BrowserActivity : Activity
             dialog.Dismiss();
             new AlertDialog.Builder(this)
                 .SetTitle(site.Title)!
-                .SetItems(["Renombrar…", "Borrar de favoritos"], (_, a) =>
+                .SetItems([T("Rename…"), T("Remove from favorites")], (_, a) =>
                 {
                     if (a.Which == 1) DeleteSite(site.Url);
                     else RenameSite(site.Url, site.Title);
@@ -495,16 +494,16 @@ public class BrowserActivity : Activity
         var input = new EditText(this) { Text = title };
         input.SetSingleLine(true);
         new AlertDialog.Builder(this)
-            .SetTitle("Nombre del sitio")!
+            .SetTitle(T("Site name"))!
             .SetView(input)!
-            .SetPositiveButton("Guardar", (_, _) =>
+            .SetPositiveButton(T("Save"), (_, _) =>
             {
                 var bookmarks = _settings.Bookmarks;
                 if (bookmarks.Sites.FirstOrDefault(s => s.Url == url) is { } site && (input.Text ?? "").Trim() is { Length: > 0 } t)
                     site.Title = t;
                 _settings.Bookmarks = bookmarks;
             })!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 
@@ -567,7 +566,7 @@ public class BrowserActivity : Activity
                 var media = a._media.Items[0];
                 new AlertDialog.Builder(a)
                     .SetTitle(MediaSniffer.DisplayName(url, a._pageTitle))!
-                    .SetItems(["⬇ Descargar a Descargas/VrView", "▶ Ver ahora en el visor", "★ Guardar en Videos web"], (_, e) =>
+                    .SetItems([T("⬇ Download to Download/VrView"), T("▶ Watch now in the viewer"), T("★ Save to Web videos")], (_, e) =>
                     {
                         if (e.Which == 0) a.Download(url, contentDisposition, mimetype);
                         else if (e.Which == 1) a.Play(media);

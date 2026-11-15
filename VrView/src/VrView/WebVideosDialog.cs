@@ -14,23 +14,22 @@ internal static class WebVideosDialog
         if (videos.Count == 0)
         {
             new AlertDialog.Builder(activity)
-                .SetTitle("Aún no hay videos web")!
-                .SetMessage("En el navegador, reproduce un video en su página, pulsa «🎬 Videos» y elige «★ Guardar en Videos web». " +
-                            "Los videos guardados también aparecen en la Biblioteca del visor.")!
-                .SetPositiveButton("Entendido", (_, _) => { })!
+                .SetTitle(T("No web videos yet"))!
+                .SetMessage(T("In the browser, play a video on its page, press “🎬 Videos” and choose “★ Save to Web videos”. Saved videos also appear in the viewer's Library."))!
+                .SetPositiveButton(T("Got it"), (_, _) => { })!
                 .Show();
             return;
         }
         string[] labels = videos.Select(v =>
         {
-            string kind = v.Kind switch { StreamKind.Hls => "stream", StreamKind.Dash => "DASH, no compatible", _ => "archivo" };
+            string kind = v.Kind switch { StreamKind.Hls => T("stream"), StreamKind.Dash => T("DASH, not supported"), _ => T("file") };
             string host = System.Uri.TryCreate(v.PageUrl, UriKind.Absolute, out var u) ? u.Host : "";
             return $"{v.Title}\n{kind} · {host}";
         }).ToArray();
         var dialog = new AlertDialog.Builder(activity)
-            .SetTitle("★ Videos web · mantén pulsado para más")!
+            .SetTitle(T("★ Web videos · long-press for more"))!
             .SetItems(labels, (_, e) => Play(activity, settings, videos[e.Which]))!
-            .SetNegativeButton("Cerrar", (_, _) => { })!
+            .SetNegativeButton(T("Close"), (_, _) => { })!
             .Create()!;
         dialog.Show();
         dialog.ListView!.ItemLongClick += (_, e) =>
@@ -39,7 +38,7 @@ internal static class WebVideosDialog
             dialog.Dismiss();
             new AlertDialog.Builder(activity)
                 .SetTitle(video.Title)!
-                .SetItems(["Abrir su página (renueva el enlace si expiró)", "Renombrar…", "Borrar"], (_, a) =>
+                .SetItems([T("Open its page (renews the link if it expired)"), T("Rename…"), T("Delete")], (_, a) =>
                 {
                     switch (a.Which)
                     {
@@ -49,7 +48,7 @@ internal static class WebVideosDialog
                             var b = settings.Bookmarks;
                             b.Videos.RemoveAll(v => v.Id == video.Id);
                             settings.Bookmarks = b;
-                            Toast.MakeText(activity, $"«{video.Title}» borrado de Videos web", ToastLength.Short)!.Show();
+                            Toast.MakeText(activity, F("“{0}” removed from Web videos", video.Title), ToastLength.Short)!.Show();
                             break;
                     }
                 })!
@@ -61,7 +60,7 @@ internal static class WebVideosDialog
     {
         if (video.Kind == StreamKind.Dash)
         {
-            Toast.MakeText(activity, "El reproductor del sistema no puede con DASH; mira si la página ofrece otra versión", ToastLength.Long)!.Show();
+            Toast.MakeText(activity, T("The system player cannot play DASH; check whether the page offers another version"), ToastLength.Long)!.Show();
             return;
         }
         var items = WebBookmarkItems.All(settings.Bookmarks);
@@ -74,16 +73,16 @@ internal static class WebVideosDialog
         var input = new EditText(activity) { Text = title };
         input.SetSingleLine(true);
         new AlertDialog.Builder(activity)
-            .SetTitle("Nombre del video")!
-            .SetMessage("Las etiquetas de formato (180, 360, LR, TB…) en el nombre ayudan a mostrarlo bien.")!
+            .SetTitle(T("Video name"))!
+            .SetMessage(T("Format tags in the name (180, 360, LR, TB…) help show it correctly."))!
             .SetView(input)!
-            .SetPositiveButton("Guardar", (_, _) =>
+            .SetPositiveButton(T("Save"), (_, _) =>
             {
                 var b = settings.Bookmarks;
                 if (b.GetVideo(id) is { } v && (input.Text ?? "").Trim() is { Length: > 0 } t) v.Title = t;
                 settings.Bookmarks = b;
             })!
-            .SetNegativeButton("Cancelar", (_, _) => { })!
+            .SetNegativeButton(T("Cancel"), (_, _) => { })!
             .Show();
     }
 }

@@ -1,0 +1,1 @@
+Delete videos (they go to the trash first). Subfolders are included by default, with a switch in the library. Recenter with your head: look at the new center and hold still.

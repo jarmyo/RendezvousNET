@@ -1,0 +1,37 @@
+VrView turns your phone and a simple VR headset into a personal cinema for the videos you already have. Choose a folder and it becomes a playlist: put the phone in the headset and watch, with no account and no ads.
+
+VrView is free and fully unlocked. Every feature is included. If you enjoy it, there is an optional one-time "buy me a beer" button.
+
+FOLDER PLAYLISTS
+• Pick any folder, with or without subfolders, and play it in natural order
+• Shuffle, repeat all or repeat one
+• A library inside the headset, with thumbnails, filters and sorting, so you can change video without taking it off
+• Picks up where you left off, video by video
+
+THE FORMATS YOU ACTUALLY FILM IN
+• Flat, 180°, 360°, fisheye, EAC cubemap, 3×2 cubemap and the embedded mesh of VR180 cameras
+• Mono, side by side, top-bottom and swapped eyes
+• Detected automatically from the file's VR metadata, tags in its name (such as _180_LR) or its shape
+• A full format editor for cameras that don't follow the standard: coverage, lens angle, circle center and size
+• Save a format as a profile and use it for a whole folder
+
+MADE FOR PHONE HEADSETS
+• Anti-drift head tracking, so the picture stays in front of you
+• Scan your headset's QR code to load its lenses, or use the 3-step calibration wizard
+• Lens distortion correction and adjustable lens separation
+• Look at a button to press it, or use the headset's button, a Bluetooth gamepad or a keyboard
+• Level the horizon of a crooked video with your head
+
+MORE
+• Bookmarks with thumbnails and names
+• Audio track and subtitle selection, including .srt files next to the video
+• Technical information: codec, resolution, frame rate and hardware or software decoding
+• A screen view without a headset: drag to look around and pinch to zoom
+• Appears in "Open with" in galleries and file managers
+• Available in English, Spanish, French and German
+
+YOUR VIDEOS STAY YOURS
+VrView needs no storage permission: you grant access only to the folders you choose. There are no accounts, ads or analytics. Your settings are saved on your device, in a small vrview.json file inside each folder, so they survive a reinstall.
+
+GOOD TO KNOW
+VrView plays video files stored on your device; it includes no videos and no streaming service. Which resolutions play smoothly depends on your phone's video decoder. Head tracking needs a gyroscope; without one, drag with your finger to look around. Requires Android 8.0 or later.

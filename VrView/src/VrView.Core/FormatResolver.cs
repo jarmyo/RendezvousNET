@@ -22,7 +22,7 @@ public enum FormatSource
 /// <summary>Where the format editor saves changes.</summary>
 public enum FormatScope { Video, Folder, Profile }
 
-/// <summary>One line of the "¿De dónde sale este formato?" list.</summary>
+/// <summary>One line of the "Where does this format come from?" list.</summary>
 public readonly record struct FormatCandidate(FormatSource Source, string Text, bool Available, bool Used);
 
 /// <summary>Everything that can decide the format of a video.</summary>
@@ -39,15 +39,15 @@ public sealed record FormatInputs(
 /// <summary>The format in use, why, and the alternatives.</summary>
 public sealed record FormatChoice(VideoFormat Format, FormatSource Source, string? Profile, IReadOnlyList<FormatCandidate> Candidates)
 {
-    /// <summary>Short note for the player's status line, e.g. "carpeta" or "perfil Cámara 200°".</summary>
+    /// <summary>Short note for the player's status line, e.g. "folder" or "profile Camera 200°".</summary>
     public string Note => Source switch
     {
-        FormatSource.Video => "este video",
-        FormatSource.VideoProfile or FormatSource.FolderProfile => $"perfil {Profile}",
-        FormatSource.Folder => "carpeta",
-        FormatSource.Metadata => "metadatos",
-        FormatSource.NameTags => "nombre",
-        _ => "auto",
+        FormatSource.Video => T("this video"),
+        FormatSource.VideoProfile or FormatSource.FolderProfile => F("profile {0}", Profile),
+        FormatSource.Folder => T("folder"),
+        FormatSource.Metadata => T("metadata"),
+        FormatSource.NameTags => T("name"),
+        _ => T("auto"),
     };
 
     /// <summary>Where the editor saves by default: where the format comes from.</summary>
@@ -84,27 +84,29 @@ public static class FormatResolver
         else if (i.Metadata is { } m) (format, source) = (m, FormatSource.Metadata);
         else (format, source) = (detected, tags ? FormatSource.NameTags : FormatSource.Auto);
 
+        string? folderText = folder is null ? null
+            : folderProfile is not null ? F("Folder: profile “{0}”", folderProfile) : F("Folder: {0}", folder.Value.Label);
+        if (folderText is not null && tags) folderText = F("{0} (does not apply: the name has tags)", folderText);
+
         var list = new List<FormatCandidate>
         {
             new(FormatSource.Video,
-                i.VideoOverride is { } vo ? $"Este video: {vo.Label}"
-                : videoProfile is not null ? $"Este video: perfil «{i.VideoProfile}»"
-                : "Este video: sin elegir",
+                i.VideoOverride is { } vo ? F("This video: {0}", vo.Label)
+                : videoProfile is not null ? F("This video: profile “{0}”", i.VideoProfile)
+                : T("This video: not set"),
                 i.VideoOverride is not null || videoProfile is not null,
                 source is FormatSource.Video or FormatSource.VideoProfile),
             new(folderProfile is null ? FormatSource.Folder : FormatSource.FolderProfile,
-                folder is null ? "Carpeta: sin elegir"
-                : (folderProfile is not null ? $"Carpeta: perfil «{folderProfile}»" : $"Carpeta: {folder.Value.Label}")
-                  + (tags ? " (no se aplica: el nombre trae etiquetas)" : ""),
+                folderText ?? T("Folder: not set"),
                 folder is not null && !tags,
                 source is FormatSource.Folder or FormatSource.FolderProfile),
             new(FormatSource.Metadata,
-                i.Metadata is { } md ? $"Metadatos del archivo: {md.Label}" : "Metadatos del archivo: no tiene",
+                i.Metadata is { } md ? F("File metadata: {0}", md.Label) : T("File metadata: none"),
                 i.Metadata is not null, source == FormatSource.Metadata),
             new(FormatSource.NameTags,
-                tags ? $"Etiquetas del nombre: {detected.ShortLabel}" : "Etiquetas del nombre: ninguna",
+                tags ? F("Name tags: {0}", detected.ShortLabel) : T("Name tags: none"),
                 tags, source == FormatSource.NameTags),
-            new(FormatSource.Auto, $"Automático por proporción ({AspectText(i.Width, i.Height)})",
+            new(FormatSource.Auto, F("Automatic from aspect ratio ({0})", AspectText(i.Width, i.Height)),
                 !tags, source == FormatSource.Auto),
         };
         return new FormatChoice(format, source, profile, list);

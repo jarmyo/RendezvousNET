@@ -9,7 +9,7 @@ public enum MenuAction
     // Windows: Open (Arg = WindowKind), Tab (Arg = tab index), Hide (✕), Back (previous window), Done
     Open, Tab, Hide, Back, Done,
     // Horizon
-    PitchUp, PitchDown, RollLeft, RollRight, YawLeft, YawRight, ResetHorizon, SetHorizon,
+    PitchUp, PitchDown, RollLeft, RollRight, YawLeft, YawRight, ResetHorizon, SetHorizon, RecenterAim,
     // Spots
     SpotAdd, SpotPrev, SpotNext, SpotPagePrev, SpotPageNext, SpotDeleteMode, SpotSlot,
     // Edit mode: switch, fine seeking and parts marked for removal ("cortes")
@@ -23,9 +23,11 @@ public enum MenuAction
     Calibrate, AutoRecenter, Quality, MeshDetail, ProfileUse, ProfileDelete, ClearVideo, ClearFolder,
     CalibrationStep, ViewerReset, ShowFps,
     // Library (Arg = folder index / filter / sort / slot)
-    LibraryFolder, LibraryFilter, LibrarySort, LibraryItem, LibraryPagePrev, LibraryPageNext, LibraryContinue,
+    LibraryFolder, LibraryFilter, LibrarySort, LibraryItem, LibraryPagePrev, LibraryPageNext, LibraryContinue, LibrarySubfolders,
     // Tracks (Arg = track index, -1 = off)
     AudioTrack, SubtitleTrack,
+    // Moves the current video to the trash (Android asks for confirmation)
+    DeleteVideo,
 }
 
 /// <summary>The windows of the VR interface (and of the touch overlay).</summary>
