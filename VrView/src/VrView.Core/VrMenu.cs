@@ -12,6 +12,9 @@ public enum MenuAction
     PitchUp, PitchDown, RollLeft, RollRight, YawLeft, YawRight, ResetHorizon, SetHorizon,
     // Spots
     SpotAdd, SpotPrev, SpotNext, SpotPagePrev, SpotPageNext, SpotDeleteMode, SpotSlot,
+    // Edit mode: switch, fine seeking and parts marked for removal ("cortes")
+    EditMode, Back1, Fwd1, CutMark, CutCancel, CutToHere, CutFromHere, CutPrev, CutNext, CutSkip,
+    CutPagePrev, CutPageNext, CutDeleteMode, CutSlot,
     // Format editor (Arg = Projection / StereoMode / Param / FormatScope)
     FormatProjection, FormatEyes, FormatSwap, FormatLens, ParamSet, ParamMinus, ParamPlus, ParamReset,
     NadirToggle, HorizonToggle, FormatScope, FormatAuto,
@@ -26,7 +29,7 @@ public enum MenuAction
 }
 
 /// <summary>The windows of the VR interface (and of the touch overlay).</summary>
-public enum WindowKind { Player, Format, Spots, Info, Settings, Library, Horizon, Calibration, Tracks }
+public enum WindowKind { Player, Format, Spots, Info, Settings, Library, Horizon, Calibration, Tracks, Cuts }
 
 /// <summary>How an element looks and reacts.</summary>
 public enum UiKind
@@ -84,6 +87,10 @@ public sealed record UiElement(UiKind Kind, MenuAction Action, UiRect Rect)
     public bool Danger { get; init; }
     /// <summary>Spot positions as fractions, drawn on the seek bar.</summary>
     public float[]? Ticks { get; init; }
+    /// <summary>Parts marked for removal as (from, to) fraction pairs, drawn red on the seek bar.</summary>
+    public float[]? Ranges { get; init; }
+    /// <summary>Start of a part being marked (fraction, negative = none), drawn on the seek bar.</summary>
+    public float Pending { get; init; } = -1;
 
     public bool Clickable => Action != MenuAction.None && Enabled;
 }

@@ -41,6 +41,11 @@ public sealed class FolderSettings
         foreach (var s in e.Spots ?? [])
             if (SpotList.Add(state.Spots, s.At) && !string.IsNullOrWhiteSpace(s.Name))
                 state.SpotNames[Math.Max(0, s.At)] = s.Name!.Trim();
+        if (e.Cuts is { } cuts)
+        {
+            state.Cuts = CutList.Normalize((cuts.Ranges ?? []).Where(r => r is { Length: 2 }).Select(r => new CutRange(r[0], r[1])));
+            state.CutsDurationMs = Math.Max(0, cuts.Duration);
+        }
         return state;
     }
 
@@ -62,7 +67,51 @@ public sealed class FolderSettings
             Spots = state.Spots.Count > 0
                 ? state.Spots.Select(s => new SpotEntry { At = s, Name = state.SpotNames.GetValueOrDefault(s) }).ToList()
                 : null,
+            Cuts = state.Cuts.Count > 0
+                ? new CutsEntry { Duration = state.CutsDurationMs, Ranges = state.Cuts.Select(c => new[] { c.FromMs, c.ToMs }).ToList() }
+                : null,
         };
+    }
+
+    /// <summary>
+    /// Records that the video <paramref name="sourcePath"/> was edited into <paramref name="targetPath"/> (the same
+    /// path when the original was replaced) by removing the <paramref name="removed"/> parts: the resume position
+    /// and the spots move with the cuts (a spot inside a removed part goes to the cut point), format, profile and
+    /// horizon are kept, and the cuts are done so they are cleared (also on the original when it was kept).
+    /// </summary>
+    public EditResult ApplyEdit(string sourcePath, string targetPath, IReadOnlyList<CutRange> removed)
+    {
+        var parts = CutList.Normalize(removed);
+        var source = GetVideo(sourcePath) ?? new VideoState();
+        var edited = new VideoState
+        {
+            PositionMs = CutList.Remap(parts, source.PositionMs),
+            FormatOverride = source.FormatOverride,
+            Profile = source.Profile,
+            Pitch = source.Pitch,
+            Roll = source.Roll,
+            Yaw = source.Yaw,
+        };
+        int moved = 0, merged = 0;
+        foreach (long spot in source.Spots)
+        {
+            if (CutList.IndexAt(parts, spot) >= 0) moved++;
+            long at = CutList.Remap(parts, spot);
+            if (!SpotList.Add(edited.Spots, at))
+            {
+                merged++;
+                continue;
+            }
+            if (source.SpotNames.TryGetValue(spot, out var name)) edited.SpotNames[at] = name;
+        }
+        if (sourcePath != targetPath)
+        {
+            source.Cuts.Clear();
+            source.CutsDurationMs = 0;
+            SetVideo(sourcePath, source);
+        }
+        SetVideo(targetPath, edited);
+        return new EditResult(edited.Spots.Count, moved, merged);
     }
 
     public FolderEntry? GetFolder(string relativeVideoPath) =>
@@ -176,6 +225,7 @@ public sealed class VideoEntry
     public string? Profile { get; set; }
     public HorizonEntry? Horizon { get; set; }
     public List<SpotEntry>? Spots { get; set; }
+    public CutsEntry? Cuts { get; set; }
 
     // Version 1 (read only; moved into Horizon when parsing).
     public float Pitch { get; set; }
@@ -189,6 +239,22 @@ public sealed class HorizonEntry
     public float Roll { get; set; }
     public float Yaw { get; set; }
 }
+
+/// <summary>
+/// Parts marked for removal: <c>{ "duration": 600000, "ranges": [[0, 180000]] }</c>. The duration of the file
+/// when they were marked tells whether they still belong to the file (it changes once it is edited).
+/// </summary>
+public sealed class CutsEntry
+{
+    public long Duration { get; set; }
+    public List<long[]>? Ranges { get; set; }
+}
+
+/// <summary>What <see cref="FolderSettings.ApplyEdit"/> did with the spots.</summary>
+/// <param name="Spots">Spots of the edited video.</param>
+/// <param name="MovedToCut">Spots that were inside a removed part and now sit on the cut point.</param>
+/// <param name="Merged">Spots dropped because they landed on another one.</param>
+public sealed record EditResult(int Spots, int MovedToCut, int Merged);
 
 [JsonConverter(typeof(SpotEntryJsonConverter))]
 public sealed class SpotEntry

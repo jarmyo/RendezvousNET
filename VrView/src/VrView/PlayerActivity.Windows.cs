@@ -58,7 +58,7 @@ public partial class PlayerActivity
         {
             case WindowKind.Format:
                 _editScope = null;
-                _frames.RequestRaw(Position);
+                if (_stateItem is { IsRemote: false }) _frames.RequestRaw(Position);
                 break;
             case WindowKind.Library:
                 EnsureLibrary();
@@ -234,6 +234,9 @@ public partial class PlayerActivity
             // Tracks
             case MenuAction.AudioTrack: SelectAudio(arg); break;
             case MenuAction.SubtitleTrack: SelectSubtitle(arg); break;
+
+            // Edit mode and cuts
+            default: HandleEditAction(action, arg); break;
         }
         PushConfig();
         RefreshUi();
@@ -540,10 +543,14 @@ public partial class PlayerActivity
         _spots = _state.Spots.ToArray();
         _spotNames = _spots.Select(s => _state.SpotNames.GetValueOrDefault(s, "")).ToArray();
         _spotTicksDuration = -1;
+        CutsChanged();
         if (_stateItem is { } item)
         {
+            // Also for web videos, so no picture of the previous video is shown; their frames are not decoded.
             _frames.SetVideo(item.Location, CurrentFormat);
+            if (item.IsRemote) return;
             _frames.Request(_spots);
+            _frames.Request(_cuts.Select(c => c.FromMs));
         }
     }
 
@@ -554,7 +561,7 @@ public partial class PlayerActivity
     private Bitmap? Picture(UiElement e) => e.Kind switch
     {
         UiKind.Preview => _frames.Raw,
-        UiKind.Thumb when e.Action == MenuAction.SpotSlot => _frames.Get(e.Ms),
+        UiKind.Thumb when e.Action is MenuAction.SpotSlot or MenuAction.CutSlot => _frames.Get(e.Ms),
         UiKind.Thumb when e.Action == MenuAction.LibraryItem && _library is { } lib && e.Ms >= 0 && e.Ms < lib.View.Count =>
             _libThumbs.Get(lib.View[(int)e.Ms].Location),
         _ => null,
@@ -563,6 +570,7 @@ public partial class PlayerActivity
     /// <summary>Frame for the preview above the seek bar (GL thread; decoding is started if needed).</summary>
     private Bitmap? SeekPreview(long ms)
     {
+        if (_stateItem is not { IsRemote: false }) return null;
         var bmp = _frames.Get(ms);
         if (bmp is null) _frames.Request([ms]);
         return bmp;
@@ -684,6 +692,9 @@ public partial class PlayerActivity
 
     private LibraryState? _library;
 
+    /// <summary>Library "folder" with the saved web videos.</summary>
+    private const string WebFolder = "web:";
+
     private void EnsureLibrary()
     {
         if (_library is not null) return;
@@ -692,9 +703,10 @@ public partial class PlayerActivity
         lib.Trees = _settings.RecentFolders.Where(allowed.Contains).ToList();
         string? currentTree = Current is { } c ? MediaUtil.TreeOf(c.Location) : null;
         if (currentTree is not null && !lib.Trees.Contains(currentTree)) lib.Trees.Insert(0, currentTree);
-        lib.Names = lib.Trees.Select(t => FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
+        if (_settings.Bookmarks.Videos.Count > 0) lib.Trees.Insert(0, WebFolder);
+        lib.Names = lib.Trees.Select(t => t == WebFolder ? "★ Videos web" : FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
         // Start with the playing list itself.
-        lib.Folder = currentTree is null ? -1 : lib.Trees.IndexOf(currentTree);
+        lib.Folder = currentTree is not null ? lib.Trees.IndexOf(currentTree) : Current is { IsRemote: true } ? lib.Trees.IndexOf(WebFolder) : -1;
         lib.Items = _playlist.Items.ToList();
         RebuildLibraryView();
     }
@@ -706,6 +718,13 @@ public partial class PlayerActivity
         var cts = lib.Scan = new CancellationTokenSource();
         lib.Folder = index;
         lib.Page = 0;
+        if (lib.Trees[index] == WebFolder)
+        {
+            lib.Loading = false;
+            lib.Items = WebBookmarkItems.All(_settings.Bookmarks);
+            RebuildLibraryView();
+            return;
+        }
         lib.Loading = true;
         lib.Items = [];
         RebuildLibraryView();
@@ -781,6 +800,8 @@ public partial class PlayerActivity
             if (d > 0) parts.Add(MediaUtil.FormatTime(d));
             if (st.Spots.Count > 0) parts.Add(st.Spots.Count == 1 ? "1 marca" : $"{st.Spots.Count} marcas");
             else if (st.PositionMs == 0) parts.Add("nuevo");
+            if (st.Cuts.Count > 0) parts.Add("✂ " + st.Cuts.Count);
+            if (item.IsRemote) parts.Add("web");
             string name = item.Name[(item.Name.LastIndexOf('/') + 1)..];
             return new LibraryEntry(lib.Page * LibraryModel.PerPage + i, System.IO.Path.GetFileNameWithoutExtension(name),
                 f.ShortLabel, string.Join(" · ", parts), Progress(item, st), item.Location == Current?.Location);
@@ -809,7 +830,9 @@ public partial class PlayerActivity
             if (idx != _playlist.CurrentIndex) { SaveCurrentPosition(); _playlist.JumpTo(idx); OpenCurrent(); }
             return;
         }
-        PlayItems([new MediaItem(uri, _settings.LastVideoName ?? "video")], 0);
+        // A saved web video keeps its page and remembered state.
+        var web = WebBookmarkItems.All(_settings.Bookmarks).FirstOrDefault(i => i.Location == uri);
+        PlayItems([web ?? new MediaItem(uri, _settings.LastVideoName ?? "video")], 0);
     }
 
     // ---- Info ----
@@ -822,7 +845,13 @@ public partial class PlayerActivity
         void Row(string key, string value) { rows.Add(key); rows.Add(value); }
         string name = item?.Name ?? "";
         Row("Archivo", name);
-        if (f is null) Row("Leyendo", "información del archivo…");
+        if (item is { IsRemote: true })
+        {
+            Row("Origen", "video web · " + (System.Uri.TryCreate(item.Location, UriKind.Absolute, out var u) ? u.Host : ""));
+            if (item.PageUrl is { } page) Row("Página", page);
+            Row("Video", $"{_videoWidth}×{_videoHeight} · {MediaUtil.FormatTime(Duration)}");
+        }
+        else if (f is null) Row("Leyendo", "información del archivo…");
         else
         {
             Row("Tamaño", $"{FormatBytes(f.SizeBytes)} · {MediaUtil.FormatTime(f.DurationMs > 0 ? f.DurationMs : Duration)}");
@@ -842,6 +871,9 @@ public partial class PlayerActivity
         Row("De dónde sale", _choice.Candidates.First(c => c.Used).Text);
         Row("Horizonte", _state.HasHorizon ? $"nivel {_state.Roll:+0.0;-0.0}°, inclinación {_state.Pitch:+0.0;-0.0}°, giro {_state.Yaw:+0;-0}°" : "sin corrección");
         Row("Marcas", _spots.Length == 0 ? "ninguna" : $"{_spots.Length} · " + string.Join(", ", _spots.Take(6).Select(MediaUtil.FormatTime)));
+        if (_cuts.Length > 0)
+            Row("Cortes", $"{_cuts.Length} · se quitan {MediaUtil.FormatTime(CutList.RemovedMs(_cuts))}" +
+                (_cutsStale ? " · ⚠ de otra versión del archivo" : _settings.SkipCuts ? " · se saltan" : " · se ven"));
         Row("Guardado en", item is null ? "" : _store.StorageText(item));
         Row("Sensor", Windows.TrackingText(_tracker.Status));
         return rows.ToArray();
@@ -923,7 +955,7 @@ public partial class PlayerActivity
             top == WindowKind.Library ? BuildLibraryModel() : LibraryModel.Empty,
             new TracksModel(_audioTracks.Select(a => a.Label).ToArray(), _selectedAudio,
                 _subtitleTracks.Select(s => s.Label).ToArray(), _selectedSubtitle),
-            ProfileNames(), item is null ? "" : _store.StorageText(item), _calibrationStep);
+            ProfileNames(), item is null ? "" : _store.StorageText(item), _calibrationStep, BuildEditModel(duration));
         var window = Windows.Build(state);
         if (!Windows.SameContent(window, _ui)) _ui = window;
         if (_touchWindows)

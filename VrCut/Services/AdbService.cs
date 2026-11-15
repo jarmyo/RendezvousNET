@@ -65,6 +65,49 @@ public static class AdbService
         await ScanAsync(remote);
     }
 
+    /// <summary>Which of the given files exist on the phone (one round-trip).</summary>
+    public static async Task<HashSet<string>> ExistingFilesAsync(IEnumerable<string> paths)
+    {
+        var list = paths.ToList();
+        if (list.Count == 0)
+            return [];
+        string cmd = "for f in " + string.Join(' ', list.Select(Quote)) + "; do [ -f \"$f\" ] && echo \"$f\"; done";
+        string text = await ProcessRunner.RunAsync("adb", ["shell", cmd], allowFailure: true);
+        return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.TrimEnd('\r')).ToHashSet();
+    }
+
+    /// <summary>Reads a small text file from the phone.</summary>
+    public static async Task<string> ReadTextAsync(string remote, string tempDir, CancellationToken ct = default)
+    {
+        Directory.CreateDirectory(tempDir);
+        string local = Path.Combine(tempDir, Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            await ProcessRunner.RunAsync("adb", ["pull", remote, local], ct: ct);
+            return await File.ReadAllTextAsync(local, ct);
+        }
+        finally
+        {
+            File.Delete(local);
+        }
+    }
+
+    /// <summary>Writes a small text file on the phone (UTF-8 without BOM).</summary>
+    public static async Task WriteTextAsync(string remote, string text, string tempDir, CancellationToken ct = default)
+    {
+        Directory.CreateDirectory(tempDir);
+        string local = Path.Combine(tempDir, Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            await File.WriteAllTextAsync(local, text, new System.Text.UTF8Encoding(false), ct);
+            await ProcessRunner.RunAsync("adb", ["push", local, remote], ct: ct);
+        }
+        finally
+        {
+            File.Delete(local);
+        }
+    }
+
     // Keeps the phone's media index (used by many VR players) in sync with added, renamed or removed files.
     private static Task ScanAsync(string remote) =>
         ProcessRunner.RunAsync("adb",

@@ -8,7 +8,17 @@ public enum RepeatMode
 }
 
 /// <summary>A playable entry: an opaque location (content URI) and a display name.</summary>
-public sealed record MediaItem(string Location, string Name, long SizeBytes = 0);
+/// <param name="Location">Content URI of a file, or the http(s) address of a web video.</param>
+/// <param name="PageUrl">For web videos: the page the video was found on (sent as referrer).</param>
+/// <param name="StateKey">Key of the remembered state when it is not the location (saved web videos, whose address may change).</param>
+public sealed record MediaItem(string Location, string Name, long SizeBytes = 0, string? PageUrl = null, string? StateKey = null)
+{
+    public string Key => StateKey ?? Location;
+
+    /// <summary>A web video (played over the network; no file to read metadata or thumbnails from).</summary>
+    public bool IsRemote => Location.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                            Location.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>
 /// Ordered list of videos with shuffle and repeat. Shuffle keeps a play order permutation so

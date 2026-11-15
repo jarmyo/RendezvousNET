@@ -23,10 +23,17 @@ public sealed class VideoState
     /// <summary>Optional names of spots, by position.</summary>
     public Dictionary<long, string> SpotNames { get; set; } = [];
 
+    /// <summary>Parts marked for removal in edit mode, sorted and not overlapping.</summary>
+    public List<CutRange> Cuts { get; set; } = [];
+
+    /// <summary>Duration of the file when the cuts were marked (0 = unknown), to tell whether they still apply.</summary>
+    public long CutsDurationMs { get; set; }
+
     public bool HasHorizon => Pitch != 0 || Roll != 0 || Yaw != 0;
 
     /// <summary>True when nothing differs from a never-played video (it need not be stored).</summary>
-    public bool IsEmpty => PositionMs == 0 && FormatOverride is null && string.IsNullOrEmpty(Profile) && !HasHorizon && Spots.Count == 0;
+    public bool IsEmpty => PositionMs == 0 && FormatOverride is null && string.IsNullOrEmpty(Profile) && !HasHorizon &&
+                           Spots.Count == 0 && Cuts.Count == 0;
 
     public string Serialize()
     {
@@ -41,6 +48,11 @@ public sealed class VideoState
         if (FormatOverride is { } f) parts.Add("fmt=" + f.Serialize());
         if (!string.IsNullOrEmpty(Profile)) parts.Add("profile=" + Uri.EscapeDataString(Profile));
         if (Spots.Count > 0) parts.Add("spots=" + string.Join(',', Spots.Select(x => x.ToString(ci))));
+        if (Cuts.Count > 0)
+        {
+            parts.Add("cuts=" + string.Join(',', Cuts.Select(c => c.FromMs.ToString(ci) + "-" + c.ToMs.ToString(ci))));
+            if (CutsDurationMs > 0) parts.Add("cutsdur=" + CutsDurationMs.ToString(ci));
+        }
         return string.Join(';', parts);
     }
 
@@ -63,9 +75,25 @@ public sealed class VideoState
                 case "fmt": s.FormatOverride = VideoFormat.TryParse(value); break;
                 case "profile": s.Profile = Uri.UnescapeDataString(value); break;
                 case "spots": s.Spots = SpotList.Parse(value.Split(',')); break;
+                case "cuts": s.Cuts = ParseCuts(value); break;
+                case "cutsdur" when long.TryParse(value, NumberStyles.Integer, ci, out var d): s.CutsDurationMs = d; break;
             }
         }
         return s;
+    }
+
+    private static List<CutRange> ParseCuts(string value)
+    {
+        var ci = CultureInfo.InvariantCulture;
+        var list = new List<CutRange>();
+        foreach (var pair in value.Split(','))
+        {
+            var ends = pair.Split('-');
+            if (ends.Length == 2 && long.TryParse(ends[0], NumberStyles.Integer, ci, out var a) &&
+                long.TryParse(ends[1], NumberStyles.Integer, ci, out var b))
+                list.Add(new CutRange(a, b));
+        }
+        return CutList.Normalize(list);
     }
 
     /// <summary>Clamps an angle to (-180, 180].</summary>

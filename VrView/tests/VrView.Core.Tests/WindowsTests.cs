@@ -322,3 +322,83 @@ public class FolderSettingsV2Tests
         Assert.Equal("A 2", fs.NewProfileName("A"));
     }
 }
+
+public class EditModeWindowsTests
+{
+    private static UiState State(WindowKind w, EditModel edit) => new(
+        w, 0,
+        new PlayerStatus("clip.mp4", 60_000, 600_000, true, 50, 2, 24, "180° SBS (este video)", "Sensor: anti-deriva ✓", 30),
+        [0.1f, 0.5f],
+        null,
+        new SpotsModel([1000, 5000], ["", ""], 0, false, 0),
+        new ViewSettings(),
+        new TrackingStatus(TrackingMode.AntiDrift, true, true, 0.4f, true, 0.2f, false, 0),
+        [], LibraryModel.Empty, TracksModel.Empty, [], "", 1, edit);
+
+    private static EditModel Edit(bool pending = false) => EditModel.Off with
+    {
+        On = true,
+        Cuts = [new(0, 180_000), new(300_000, 320_000)],
+        Ranges = [0f, 0.3f, 0.5f, 0.533f],
+        PendingStartMs = pending ? 400_000 : -1,
+        PendingFraction = pending ? 0.667f : -1,
+        DurationMs = 600_000,
+    };
+
+    [Theory]
+    [InlineData(WindowKind.Player, false)]
+    [InlineData(WindowKind.Player, true)]
+    [InlineData(WindowKind.Cuts, false)]
+    [InlineData(WindowKind.Cuts, true)]
+    public void Edit_windows_fit_and_do_not_overlap(WindowKind kind, bool pending)
+    {
+        var win = Windows.Build(State(kind, Edit(pending)));
+        var clickable = win.Elements.Where(e => e.Action != MenuAction.None).ToList();
+        foreach (var e in win.Elements)
+            Assert.True(e.Rect.X0 >= 0 && e.Rect.X1 <= 1 && e.Rect.Y0 >= 0 && e.Rect.Y1 <= 1 && e.Rect.X1 > e.Rect.X0);
+        for (int i = 0; i < clickable.Count; i++)
+            for (int j = i + 1; j < clickable.Count; j++)
+            {
+                var a = clickable[i].Rect; var c = clickable[j].Rect;
+                Assert.False(a.X0 < c.X1 - 1e-4 && c.X0 < a.X1 - 1e-4 && a.Y0 < c.Y1 - 1e-4 && c.Y0 < a.Y1 - 1e-4,
+                    $"{clickable[i].Text} overlaps {clickable[j].Text}");
+            }
+    }
+
+    [Fact]
+    public void Edit_player_shows_cuts_instead_of_spots()
+    {
+        var view = Windows.Build(State(WindowKind.Player, EditModel.Off));
+        Assert.NotNull(view.Find(MenuAction.SpotAdd));
+        Assert.NotNull(view.Find(MenuAction.EditMode));
+        Assert.Equal([0.1f, 0.5f], view.Find(MenuAction.Seek)!.Ticks!);
+
+        var edit = Windows.Build(State(WindowKind.Player, Edit()));
+        Assert.Null(edit.Find(MenuAction.SpotAdd));
+        Assert.NotNull(edit.Find(MenuAction.CutMark));
+        var seek = edit.Find(MenuAction.Seek)!;
+        Assert.Null(seek.Ticks);
+        Assert.Equal(4, seek.Ranges!.Length);
+        Assert.Contains("quedará de 6:40", edit.Subtitle);
+        Assert.StartsWith("✂", edit.Title);
+    }
+
+    [Fact]
+    public void Marking_a_cut_changes_the_button_and_the_subtitle()
+    {
+        var w = Windows.Build(State(WindowKind.Player, Edit(pending: true)));
+        Assert.Contains("Fin", w.Find(MenuAction.CutMark)!.Text);
+        Assert.Contains("6:40", w.Subtitle);
+        Assert.False(Windows.SameContent(w, Windows.Build(State(WindowKind.Player, Edit()))));
+    }
+
+    [Fact]
+    public void Cut_cells_show_their_range()
+    {
+        var w = Windows.Build(State(WindowKind.Cuts, Edit()));
+        var cells = w.Elements.Where(e => e.Action == MenuAction.CutSlot).ToList();
+        Assert.Equal(2, cells.Count);
+        Assert.Contains("0:00 → 3:00", cells[0].Text);
+        Assert.Equal(300_000, cells[1].Ms);
+    }
+}

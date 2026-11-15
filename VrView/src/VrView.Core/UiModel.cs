@@ -75,6 +75,32 @@ public sealed record SpotsModel(long[] Spots, string[] Names, int Page, bool Del
     public int PageCount => Math.Max(1, (Spots.Length + PerPage - 1) / PerPage);
 }
 
+/// <summary>
+/// Edit mode: the parts of the current video marked for removal. Arrays keep their instance until the
+/// cuts change. <paramref name="Ranges"/> are (from, to) fraction pairs for the seek bar.
+/// </summary>
+/// <param name="PendingStartMs">Start of the part being marked (negative = none).</param>
+/// <param name="Stale">The cuts were marked on another version of the file (its duration changed).</param>
+public sealed record EditModel(
+    bool On,
+    CutRange[] Cuts,
+    float[] Ranges,
+    long PendingStartMs,
+    float PendingFraction,
+    bool Skip,
+    int Page,
+    bool DeleteMode,
+    long DurationMs,
+    bool Stale,
+    int ThumbsVersion)
+{
+    public const int PerPage = 5;
+    public static EditModel Off => new(false, [], [], -1, -1, true, 0, false, 0, false, 0);
+    public bool Pending => PendingStartMs >= 0;
+    public long RemovedMs => CutList.RemovedMs(Cuts);
+    public int PageCount => Math.Max(1, (Cuts.Length + PerPage - 1) / PerPage);
+}
+
 /// <summary>One video in the library grid.</summary>
 public sealed record LibraryEntry(int Index, string Name, string FormatLabel, string Detail, float Progress, bool Current);
 
@@ -119,4 +145,8 @@ public sealed record UiState(
     TracksModel Tracks,
     string[] Profiles,
     string Storage,
-    int CalibrationStep);
+    int CalibrationStep,
+    EditModel? Edit = null)
+{
+    public EditModel EditOrOff => Edit ?? EditModel.Off;
+}

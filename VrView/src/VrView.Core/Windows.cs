@@ -23,7 +23,8 @@ public static class Windows
         WindowKind.Horizon => Horizon(s),
         WindowKind.Tracks => Tracks(s),
         WindowKind.Calibration => Calibration(s),
-        _ => Player(s),
+        WindowKind.Cuts => Cuts(s),
+        _ => s.EditOrOff.On ? EditPlayer(s) : Player(s),
     };
 
     /// <summary>True when two windows draw exactly the same (so the panel need not be repainted).</summary>
@@ -37,8 +38,9 @@ public static class Windows
             var x = a.Elements[i];
             var y = b.Elements[i];
             if (x == y) continue;
-            if (x with { Ticks = null } != y with { Ticks = null }) return false;
+            if (x with { Ticks = null, Ranges = null } != y with { Ticks = null, Ranges = null }) return false;
             if (!(x.Ticks ?? []).AsSpan().SequenceEqual(y.Ticks ?? [])) return false;
+            if (!(x.Ranges ?? []).AsSpan().SequenceEqual(y.Ranges ?? [])) return false;
         }
         return true;
     }
@@ -66,12 +68,105 @@ public static class Windows
             Open(WindowKind.Spots, s.Spots.Spots.Length > 0 ? $"Marcas ({s.Spots.Spots.Length})" : "Marcas"),
             Open(WindowKind.Format, "Formato"), Open(WindowKind.Horizon, "Horizonte"), Open(WindowKind.Tracks, "Audio y subt."),
             Open(WindowKind.Info, "Info"), Open(WindowKind.Library, "Biblioteca"), Open(WindowKind.Settings, "⚙ Ajustes"),
-            Btn(MenuAction.Exit, "Salir")));
+            Btn(MenuAction.EditMode, "✂ Editar"), Btn(MenuAction.Exit, "Salir")));
         e.Add(Close(aspect, width));
         string fps = s.Settings.ShowFps && p.Fps > 0 ? $"   ·   {p.Fps:0.#} fps" : "";
         string subtitle = $"{MediaUtil.FormatTime(p.PositionMs)} / {MediaUtil.FormatTime(p.DurationMs)}   ·   {p.FormatText}   ·   " +
                           $"{p.SensorText}   ·   Vol {p.VolumePercent}%   ·   {p.Index + 1} de {p.Count}{fps}";
         return new UiWindow(WindowKind.Player, p.Title, subtitle, aspect, e) { Width = width };
+    }
+
+    /// <summary>
+    /// The player bar in edit mode: fine seeking and marking parts to remove instead of spots, the cuts on
+    /// the seek bar instead of the spots, and a clear way back to watching.
+    /// </summary>
+    private static UiWindow EditPlayer(UiState s)
+    {
+        var p = s.Player;
+        var m = s.EditOrOff;
+        const float aspect = 3.2f, width = 2.2f;
+        var e = new List<UiElement>
+        {
+            new(UiKind.Seek, MenuAction.Seek, new UiRect(0.04f, 0.25f, 0.96f, 0.35f))
+            {
+                Value = p.DurationMs > 0 ? Math.Clamp((float)p.PositionMs / p.DurationMs, 0f, 1f) : 0f,
+                Ranges = m.Ranges,
+                Pending = m.PendingFraction,
+            },
+        };
+        e.AddRange(Row(0.41f, 0.65f, 0.03f, 0.97f,
+            Btn(MenuAction.Back10, "◀◀ 10 s", repeat: true), Btn(MenuAction.Back1, "◀ 1 s", repeat: true),
+            Btn(MenuAction.PlayPause, p.Playing ? "II Pausa" : "▶ Reproducir"),
+            Btn(MenuAction.Fwd1, "1 s ▶", repeat: true), Btn(MenuAction.Fwd10, "10 s ▶▶", repeat: true),
+            CutMarkButton(m), Btn(MenuAction.CutPrev, "◀ Corte"), Btn(MenuAction.CutNext, "Corte ▶")));
+        e.AddRange(Row(0.71f, 0.95f, 0.03f, 0.97f,
+            Open(WindowKind.Cuts, m.Cuts.Length > 0 ? $"Cortes ({m.Cuts.Length})" : "Cortes"),
+            SkipToggle(m),
+            Open(WindowKind.Format, "Formato"), Open(WindowKind.Library, "Biblioteca"), Open(WindowKind.Settings, "⚙ Ajustes"),
+            Btn(MenuAction.EditMode, "✓ Terminar edición") with { Active = true },
+            Btn(MenuAction.Exit, "Salir")));
+        e.Add(Close(aspect, width));
+        return new UiWindow(WindowKind.Player, "✂ Edición · " + p.Title, EditSubtitle(p, m), aspect, e) { Width = width };
+    }
+
+    private static UiElement CutMarkButton(EditModel m) => m.Pending
+        ? Btn(MenuAction.CutMark, "✂ Fin del corte") with { Danger = true, Active = true }
+        : Btn(MenuAction.CutMark, "✂ Inicio de corte");
+
+    private static UiElement SkipToggle(EditModel m) =>
+        Tile(MenuAction.CutSkip, m.Skip ? "Saltar cortes: sí" : "Saltar cortes: no", 0, m.Skip);
+
+    private static string EditSubtitle(PlayerStatus p, EditModel m)
+    {
+        string time = $"{MediaUtil.FormatTime(p.PositionMs)} / {MediaUtil.FormatTime(p.DurationMs)}";
+        if (m.Stale) return time + "   ·   ⚠ estos cortes son de otra versión del archivo (cambió su duración)";
+        if (m.Pending) return time + $"   ·   corte desde {MediaUtil.FormatTime(m.PendingStartMs)}: ve al final y pulsa «✂ Fin del corte»";
+        if (m.Cuts.Length == 0) return time + "   ·   marca las partes a quitar con «✂ Inicio de corte»; se cortan en la computadora con VrCut";
+        string after = p.DurationMs > 0 ? $"   ·   quedará de {MediaUtil.FormatTime(p.DurationMs - m.RemovedMs)}" : "";
+        return time + $"   ·   {CutsText(m.Cuts.Length)}, se quitan {MediaUtil.FormatTime(m.RemovedMs)}{after}";
+    }
+
+    private static string CutsText(int n) => n == 1 ? "1 corte" : $"{n} cortes";
+
+    // ---- Cuts ----
+
+    private static UiWindow Cuts(UiState s)
+    {
+        const float aspect = 3.2f, width = 2.2f;
+        var m = s.EditOrOff;
+        var e = new List<UiElement>();
+        const float left = 0.03f, right = 0.97f, gap = 0.012f;
+        float w = (right - left - gap * (EditModel.PerPage - 1)) / EditModel.PerPage;
+        for (int i = 0; i < EditModel.PerPage; i++)
+        {
+            int index = m.Page * EditModel.PerPage + i;
+            if (index >= m.Cuts.Length) break;
+            var c = m.Cuts[index];
+            float x0 = left + i * (w + gap);
+            e.Add(new UiElement(UiKind.Thumb, MenuAction.CutSlot, new UiRect(x0, 0.24f, x0 + w, 0.66f))
+            {
+                Arg = i, Ms = c.FromMs, Danger = true,
+                Text = (m.DeleteMode ? "✕ " : "✂ ") + MediaUtil.FormatTime(c.FromMs) + " → " + MediaUtil.FormatTime(c.ToMs),
+                Detail = MediaUtil.FormatTime(c.LengthMs),
+            });
+        }
+        e.AddRange(Row(0.71f, 0.95f, 0.03f, 0.97f,
+            CutMarkButton(m),
+            m.Pending ? Btn(MenuAction.CutCancel, "✕ Cancelar corte") : Btn(MenuAction.CutToHere, "✂ Principio → aquí"),
+            Btn(MenuAction.CutFromHere, "✂ Aquí → final"),
+            SkipToggle(m),
+            Btn(MenuAction.CutPagePrev, "◀ Pág.") with { Enabled = m.Page > 0 },
+            Btn(MenuAction.CutPageNext, "Pág. ▶") with { Enabled = m.Page < m.PageCount - 1 },
+            Tile(MenuAction.CutDeleteMode, m.DeleteMode ? "Borrar: sí" : "Borrar: no", 0, m.DeleteMode) with { Danger = m.DeleteMode },
+            Btn(MenuAction.Back, "Volver")));
+        e.Add(Close(aspect, width));
+        string sub = m.Cuts.Length == 0
+            ? "Aún no hay: «✂ Inicio de corte» donde empieza la parte a quitar y «✂ Fin del corte» donde termina"
+            : $"{CutsText(m.Cuts.Length)} · se quitan {MediaUtil.FormatTime(m.RemovedMs)}" +
+              (m.DurationMs > 0 ? $" · quedará de {MediaUtil.FormatTime(m.DurationMs - m.RemovedMs)}" : "") +
+              (m.DeleteMode ? " · mira un corte para BORRARLO" : " · mira un corte para ver su inicio");
+        if (m.Stale) sub = "⚠ marcados en otra versión del archivo · " + sub;
+        return new UiWindow(WindowKind.Cuts, "Cortes · " + s.Player.Title, sub, aspect, e) { Width = width };
     }
 
     // ---- Format editor ----

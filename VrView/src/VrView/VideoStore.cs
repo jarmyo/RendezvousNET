@@ -16,9 +16,9 @@ internal sealed class VideoStore(Context context, AppSettings settings)
 
     public VideoState Get(MediaItem item)
     {
-        if (File(item) is not { } file) return settings.GetVideo(item.Location);
+        if (File(item) is not { } file) return settings.GetVideo(item.Key);
         var fromFile = file.Data.GetVideo(item.Name);
-        var fromPrefs = settings.GetVideo(item.Location);
+        var fromPrefs = settings.GetVideo(item.Key);
         if (!file.CanWrite && !fromPrefs.IsEmpty) return fromPrefs;
         return fromFile ?? fromPrefs;
     }
@@ -30,10 +30,10 @@ internal sealed class VideoStore(Context context, AppSettings settings)
         {
             file.Data.SetVideo(item.Name, state);
             file.MarkDirty();
-            settings.RemoveVideo(item.Location);
+            settings.RemoveVideo(item.Key);
             if (flush) file.Flush();
         }
-        else settings.SaveVideo(item.Location, state);
+        else settings.SaveVideo(item.Key, state);
     }
 
     public FolderEntry? GetFolder(MediaItem item)
@@ -79,6 +79,7 @@ internal sealed class VideoStore(Context context, AppSettings settings)
     {
         { CanWrite: true } => $"{FolderSettings.FileName} en la carpeta elegida",
         { } => "ajustes de la app (la carpeta es de solo lectura: vuelve a elegirla)",
+        _ when item.IsRemote => "ajustes de la app (video web)",
         _ => "ajustes de la app (video abierto fuera de una carpeta)",
     };
 

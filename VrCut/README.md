@@ -42,6 +42,28 @@ dotnet publish -c Release -r win-x64 --self-contained     # Windows
 6. **Exportar sin pérdida**: guarda `cut_<nombre>.mp4` junto al original (o lo reemplaza).
    Si el video viene del teléfono, el resultado se envía de vuelta a la misma carpeta.
 
+### Cortes marcados en el visor (VrView)
+
+En el **modo edición** de VrView se marcan en el visor las partes a quitar; se guardan en el
+`vrview.json` de la carpeta elegida en el teléfono. Al **importar** el video en VrCut (local o desde
+el teléfono), VrCut busca ese archivo en la carpeta del video y en las de arriba y:
+
+- carga los **cortes del visor** en el timeline (en rojo, ajustados a keyframe si está activado) para
+  revisarlos, cambiarlos o añadir más;
+- muestra las **marcas del visor** como banderitas amarillas;
+- con **Actualizar vrview.json del visor** (activado por defecto) al exportar **mueve las marcas y la
+  posición** para que sigan en la misma escena: con 0:00–3:00 cortado, una marca en 8:00 queda en
+  5:00. Una marca que caía dentro de un corte pasa al punto del corte. Se usan los cortes reales
+  (después de ajustarlos a keyframe), así que las marcas coinciden con el video exportado.
+
+Con **Guardar copia**, `cut_nombre.mp4` recibe las marcas movidas y el formato, y el original se queda
+como estaba pero sin cortes pendientes. Con **Reemplazar el original**, se actualiza su propia entrada.
+Si los cortes se marcaron sobre otra versión del archivo (su duración no coincide), no se cargan.
+
+VrCut vuelve a leer `vrview.json` justo antes de escribirlo. VrView, a su vez, nota el cambio al
+volver a la app y recarga en lugar de sobrescribir; aun así, lo más seguro es tener VrView cerrado o
+en la lista mientras exportas.
+
 ### Renombrar y borrar
 
 - **✏️ Renombrar** (F2 o clic derecho): el nombre aparece seleccionado sin la extensión.

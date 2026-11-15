@@ -153,6 +153,10 @@
             <RadioButton x:Name="ReplaceRadio" GroupName="out">
               <TextBlock Text="Reemplazar el original (no se puede deshacer)" TextWrapping="Wrap" />
             </RadioButton>
+            <CheckBox x:Name="ViewerBox" IsChecked="True" IsVisible="False"
+                      ToolTip.Tip="Mueve las marcas y la posición guardadas por el visor para que sigan en la misma escena después de cortar">
+              <TextBlock x:Name="ViewerBoxText" Text="Actualizar vrview.json del visor" TextWrapping="Wrap" />
+            </CheckBox>
             <Button x:Name="ExportButton" Classes="accent" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center" IsEnabled="False" Margin="0,6,0,0"
                     Content="Exportar sin pérdida" Click="OnExport" />

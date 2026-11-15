@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using VrCut.Services;
+using Core = VrView.Core;
 
 namespace VrCut;
 
@@ -38,6 +39,8 @@ public partial class MainWindow : Window
     private string? _remoteFile;
     private VideoInfo? _info;
     private double[] _keyframes = [];
+    // The viewer's vrview.json entry of the current video (spots and cuts marked in the headset), if any.
+    private ViewerMetadata? _viewer;
     private CancellationTokenSource? _loadCts;
     private bool _busy;
 
@@ -350,6 +353,8 @@ public partial class MainWindow : Window
         _remoteFile = null;
         _info = null;
         _keyframes = [];
+        _viewer = null;
+        ViewerBox.IsVisible = false;
         _cuts.Clear();
         Timeline.Reset(0, 0);
         UpdateCuts();
@@ -396,10 +401,47 @@ public partial class MainWindow : Window
         SetStatus("Generando miniaturas…");
 
         var keyframesTask = LoadKeyframesAsync(local, info, ct);
-        await LoadThumbnailsAsync(local, info, ct);
+        var thumbnailsTask = LoadThumbnailsAsync(local, info, ct);
+        // Cuts marked in the viewer are added once the keyframes are known (their ends snap to them).
         await keyframesTask;
-        SetStatus("Mueve el cabezal, marca inicio (I) y fin (O) de cada parte a borrar y pulsa Exportar.");
+        string? viewerNote = await LoadViewerMetadataAsync(entry.FullPath, _remoteFile is not null, info, ct);
+        await thumbnailsTask;
+        SetStatus(viewerNote ?? "Mueve el cabezal, marca inicio (I) y fin (O) de cada parte a borrar y pulsa Exportar.");
     }
+
+    /// <summary>Reads the viewer's spots and cuts of the video. Returns a status message, or null when the viewer knows nothing of it.</summary>
+    private async Task<string?> LoadViewerMetadataAsync(string videoPath, bool onPhone, VideoInfo info, CancellationToken ct)
+    {
+        ViewerMetadata? meta;
+        try
+        {
+            meta = await ViewerMetadataService.FindAsync(videoPath, onPhone, Path.Combine(_cacheDir, "meta"), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return $"⚠ No se pudo leer {Core.FolderSettings.FileName} del visor: {ex.Message}";
+        }
+        ct.ThrowIfCancellationRequested();
+        if (meta is null)
+            return null;
+
+        _viewer = meta;
+        var state = meta.State;
+        Timeline.Spots = state.Spots.Select(ms => ms / 1000.0).ToArray();
+        ViewerBox.IsVisible = true;
+        ViewerBox.IsChecked = true;
+        ViewerBoxText.Text = $"Actualizar {Core.FolderSettings.FileName} del visor ({SpotsText(state.Spots.Count)} y la posición se mueven con los cortes)";
+
+        string spots = state.Spots.Count > 0 ? $"{SpotsText(state.Spots.Count)} (amarillo)" : "sin marcas";
+        if (state.Cuts.Count == 0)
+            return $"👓 Visor: {spots}. Marca las partes a borrar y pulsa Exportar.";
+        if (!Core.CutList.BelongsTo(state.CutsDurationMs, (long)Math.Round(info.Duration * 1000)))
+            return $"⚠ Visor: {spots}; sus {state.Cuts.Count} cortes eran para otra versión del archivo (cambió la duración) y no se cargaron.";
+        int loaded = state.Cuts.Count(c => AddCut(c.FromMs / 1000.0, c.ToMs / 1000.0, quiet: true));
+        return $"👓 Visor: {spots} y {loaded} corte(s) marcados en el visor (en rojo). Revísalos y pulsa Exportar.";
+    }
+
+    private static string SpotsText(int n) => n == 1 ? "1 marca" : $"{n} marcas";
 
     private async Task<string> PullFromDeviceAsync(BrowserEntry entry, CancellationToken ct)
     {
@@ -589,10 +631,10 @@ public partial class MainWindow : Window
             AddCut(Timeline.Position, _info.Duration);
     }
 
-    private void AddCut(double a, double b)
+    private bool AddCut(double a, double b, bool quiet = false)
     {
         if (_info is null)
-            return;
+            return false;
         double from = Math.Min(a, b), to = Math.Max(a, b);
         if (from < 0.05)
             from = 0;
@@ -605,8 +647,9 @@ public partial class MainWindow : Window
 
         if (to - from < 0.05)
         {
-            SetStatus("La parte marcada es demasiado corta.");
-            return;
+            if (!quiet)
+                SetStatus("La parte marcada es demasiado corta.");
+            return false;
         }
 
         int index = 0;
@@ -614,7 +657,9 @@ public partial class MainWindow : Window
             index++;
         _cuts.Insert(index, new CutRange(from, to));
         UpdateCuts();
-        SetStatus($"Se borrará {TimeFormat.Format(from)} → {TimeFormat.Format(to)}.");
+        if (!quiet)
+            SetStatus($"Se borrará {TimeFormat.Format(from)} → {TimeFormat.Format(to)}.");
+        return true;
     }
 
     private void OnRemoveCut(object? sender, RoutedEventArgs e)
@@ -663,6 +708,8 @@ public partial class MainWindow : Window
 
         string source = _localFile;
         string? remote = _remoteFile;
+        var info = _info;
+        var viewer = ViewerBox.IsChecked == true ? _viewer : null;
         bool replace = ReplaceRadio.IsChecked == true;
         string name = Path.GetFileName(remote ?? source);
         // Prefix (not suffix) so VR tags at the end of the name (_180_LR, _360_TB…) keep working.
@@ -711,6 +758,9 @@ public partial class MainWindow : Window
             {
                 SetStatus($"✅ Guardado: {output}  ({sizes})");
             }
+
+            if (viewer is not null)
+                SetStatus(StatusText.Text + await UpdateViewerAsync(viewer, replace ? viewer.Key : viewer.SiblingKey(outName), keep, info.Duration));
         }
         finally
         {
@@ -723,6 +773,26 @@ public partial class MainWindow : Window
         string status = StatusText.Text ?? "";
         await LoadFolderAsync(CurrentFolder);
         SetStatus(status);
+    }
+
+    /// <summary>Moves the viewer's spots and resume position with the cuts. Returns a note for the status line.</summary>
+    private async Task<string> UpdateViewerAsync(ViewerMetadata viewer, string targetKey, List<(double From, double To)> keep, double duration)
+    {
+        long durationMs = (long)Math.Round(duration * 1000);
+        // What was really removed: everything outside the kept parts (after snapping to keyframes).
+        var removed = Core.CutList.Complement(
+            keep.Select(k => new Core.CutRange((long)Math.Round(k.From * 1000), (long)Math.Round(k.To * 1000))), durationMs);
+        try
+        {
+            SetStatus($"Actualizando {Core.FolderSettings.FileName} del visor…");
+            var r = await ViewerMetadataService.ApplyEditAsync(viewer, targetKey, removed, Path.Combine(_cacheDir, "meta"), CancellationToken.None);
+            string moved = r.MovedToCut > 0 ? $"; {r.MovedToCut} estaban dentro de un corte y quedan en el punto del corte" : "";
+            return $"  ·  👓 visor: {SpotsText(r.Spots)} reacomodadas{moved}";
+        }
+        catch (Exception ex)
+        {
+            return $"  ·  ⚠ no se pudo actualizar {Core.FolderSettings.FileName}: {ex.Message}";
+        }
     }
 
     // ---------- Keyboard ----------

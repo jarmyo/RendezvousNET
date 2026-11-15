@@ -9,7 +9,7 @@ using VrCut.Services;
 namespace VrCut.Controls;
 
 /// <summary>
-/// Thumbnail strip with time ruler, keyframe ticks, cut ranges and a draggable playhead.
+/// Thumbnail strip with time ruler, keyframe ticks, cut ranges, the viewer's spots and a draggable playhead.
 /// </summary>
 public sealed class TimelineControl : Control
 {
@@ -25,10 +25,12 @@ public sealed class TimelineControl : Control
     private static readonly IPen KeyframePen = new Pen(new SolidColorBrush(Color.FromArgb(160, 120, 180, 255)), 1);
     private static readonly IPen RulerPen = new Pen(new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), 1);
     private static readonly IBrush TextBrush = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255));
+    private static readonly IBrush SpotBrush = new SolidColorBrush(Color.FromRgb(255, 202, 40));
 
     private Bitmap?[] _thumbs = [];
     private IReadOnlyList<CutRange> _cuts = [];
     private double[] _keyframes = [];
+    private double[] _spots = [];
     private double _duration;
     private double _position;
     private double? _markIn;
@@ -66,12 +68,19 @@ public sealed class TimelineControl : Control
         set { _keyframes = value; InvalidateVisual(); }
     }
 
+    /// <summary>Spots ("marcas") marked in the viewer, in seconds.</summary>
+    public double[] Spots
+    {
+        set { _spots = value; InvalidateVisual(); }
+    }
+
     public void Reset(double duration, int thumbnailCount)
     {
         foreach (var t in _thumbs)
             t?.Dispose();
         _thumbs = new Bitmap?[thumbnailCount];
         _keyframes = [];
+        _spots = [];
         _cuts = [];
         _markIn = null;
         _duration = duration;
@@ -132,6 +141,22 @@ public sealed class TimelineControl : Control
             double a = X(Math.Min(mi, _position)), b = X(Math.Max(mi, _position));
             ctx.FillRectangle(PendingFill, new Rect(a, strip.Top, b - a, strip.Height));
             ctx.DrawLine(MarkInPen, new Point(X(mi), strip.Top), new Point(X(mi), strip.Bottom));
+        }
+
+        // The viewer's spots: small yellow flags on the top of the strip (they move with the cuts on export).
+        foreach (var t in _spots)
+        {
+            double x = X(t);
+            var flag = new StreamGeometry();
+            using (var g = flag.Open())
+            {
+                g.BeginFigure(new Point(x - 5, strip.Top), true);
+                g.LineTo(new Point(x + 5, strip.Top));
+                g.LineTo(new Point(x, strip.Top + 9));
+                g.EndFigure(true);
+            }
+            ctx.DrawGeometry(SpotBrush, null, flag);
+            ctx.FillRectangle(SpotBrush, new Rect(x - 0.75, strip.Top, 1.5, strip.Height));
         }
 
         double px = X(_position);

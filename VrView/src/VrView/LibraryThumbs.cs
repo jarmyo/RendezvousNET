@@ -27,6 +27,8 @@ internal sealed class LibraryThumbs(Context context)
 
     public void Request(MediaItem item, VideoFormat format)
     {
+        // Web videos would be downloaded just for a picture.
+        if (item.IsRemote) return;
         if (_memory.ContainsKey(item.Location) || !_pending.TryAdd(item.Location, 0)) return;
         _ = Task.Run(() => LoadAsync(item.Location, format));
     }

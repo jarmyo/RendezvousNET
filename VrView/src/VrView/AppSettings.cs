@@ -199,6 +199,27 @@ internal sealed class AppSettings
         set => Edit(e => e.PutBoolean("showFps", value));
     }
 
+    /// <summary>Edit mode: skip the parts marked for removal while playing (to preview the result).</summary>
+    public bool SkipCuts
+    {
+        get => _prefs.GetBoolean("skipCuts", true);
+        set => Edit(e => e.PutBoolean("skipCuts", value));
+    }
+
+    /// <summary>Saved web sites and web videos.</summary>
+    public WebBookmarks Bookmarks
+    {
+        get => WebBookmarks.Parse(_prefs.GetString("webBookmarks", null));
+        set => Edit(e => e.PutString("webBookmarks", value.ToJson()));
+    }
+
+    /// <summary>Last page open in the browser.</summary>
+    public string? LastWebUrl
+    {
+        get => _prefs.GetString("lastWebUrl", null);
+        set => Edit(e => e.PutString("lastWebUrl", value));
+    }
+
     /// <summary>Cardboard URL of the scanned viewer, or null.</summary>
     public string? ViewerUrl
     {

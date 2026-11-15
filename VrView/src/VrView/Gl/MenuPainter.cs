@@ -210,6 +210,24 @@ internal sealed class MenuPainter : IDisposable
         c.DrawRoundRect(new RectF(r.Left, cy - h, r.Right, cy + h), h, h, _fill);
         _fill.Color = Accent;
         c.DrawRoundRect(new RectF(r.Left, cy - h, r.Left + r.Width() * e.Value, cy + h), h, h, _fill);
+        // Parts marked for removal (edit mode) and the start of the one being marked.
+        var ranges = e.Ranges ?? [];
+        for (int i = 0; i + 1 < ranges.Length; i += 2)
+        {
+            _fill.Color = Color.Argb(220, 229, 57, 53);
+            float x0 = r.Left + r.Width() * ranges[i], x1 = Math.Max(x0 + 3, r.Left + r.Width() * ranges[i + 1]);
+            c.DrawRect(new RectF(x0, cy - h - 0.006f * px, x1, cy + h + 0.006f * px), _fill);
+        }
+        if (e.Pending >= 0)
+        {
+            _fill.Color = Color.Argb(255, 60, 220, 90);
+            float sx = r.Left + r.Width() * e.Pending;
+            c.DrawRect(new RectF(sx - 0.004f * px, cy - h - 0.014f * px, sx + 0.004f * px, cy + h + 0.014f * px), _fill);
+            // Shade from the start to the knob: what "✂ Fin del corte" would remove.
+            float kx = r.Left + r.Width() * e.Value;
+            _fill.Color = Color.Argb(110, 60, 220, 90);
+            c.DrawRect(new RectF(Math.Min(sx, kx), cy - h, Math.Max(sx, kx), cy + h), _fill);
+        }
         _fill.Color = Spot;
         foreach (float t in e.Ticks ?? [])
         {

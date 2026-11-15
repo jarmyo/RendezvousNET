@@ -26,6 +26,8 @@ ZXing.Net para leer el código QR del visor.
 | Metadatos VR | Lee los metadatos esféricos del MP4 (`st3d`, `sv3d`: equirectangular con cobertura, cubemap, malla VR180) y los usa como formato automático. |
 | Anti-deriva | La imagen ya no se recorre de lado con el tiempo: el giroscopio se corrige muy despacio con la brújula (ignorando saltos magnéticos) y se resta el error del giroscopio medido en reposo. Modos: anti-deriva, solo giroscopio, brújula. Medidor de «grados por minuto» y botón **Calibrar**. |
 | Marcas | **＋ Marca**, **◀ Marca / Marca ▶**, rayitas amarillas en la barra y ventana **Marcas** con miniaturas. Pueden tener **nombre** (botón «✎ Nombrar marca» en la pantalla táctil). |
+| Modo edición | Interruptor **✂ Editar / ✓ Terminar edición**. En edición se marcan las **partes a quitar** (en rojo en la barra) en lugar de marcas, con saltos de ±1 s y ventana **Cortes**. «Saltar cortes» permite ver cómo quedará el video. El corte real lo hace **VrCut** en la computadora, que además mueve las marcas para que sigan en la misma escena. |
+| Navegador y videos web | **🌐 Navegador** con sitios favoritos. Mientras una página reproduce un video, VrView detecta su dirección (MP4 o stream HLS) para verlo **en el visor de VrView** en vez del visor del sitio, guardarlo en **★ Videos web** (también aparecen en la Biblioteca del visor) o descargarlo. |
 | Vista previa en la barra | Al mirar la barra de progreso aparece una miniatura del momento al que saltarías. |
 | Audio y subtítulos | Elegir pista de audio y subtítulos (los del video o un `.srt` con el mismo nombre al lado del video). Tamaño ajustable. |
 | Información | Archivo, tamaño, resolución, fps, códec y bits, velocidad, **decodificador por hardware o software**, cuadros mostrados por segundo, metadatos VR, formato y su origen, horizonte, marcas, dónde se guarda y estado del sensor. |
@@ -73,9 +75,9 @@ el resto como plano.
 - La barra del reproductor se oculta sola si dejas de mirarla; las demás ventanas no (para que
   puedas mirar el video mientras ajustas). Todas tienen **✕**.
 
-**Ventanas**: Reproductor (barra), Formato, Marcas, Horizonte, Audio y subtítulos, Información,
-Biblioteca, Ajustes (pestañas Visor, Controles, Seguimiento, Calidad, Datos) y el Asistente de
-calibración.
+**Ventanas**: Reproductor (barra), Formato, Marcas, Cortes (modo edición), Horizonte, Audio y
+subtítulos, Información, Biblioteca, Ajustes (pestañas Visor, Controles, Seguimiento, Calidad, Datos)
+y el Asistente de calibración.
 
 ### Mando Bluetooth, teclado, mandos de visor y botones multimedia
 
@@ -95,17 +97,75 @@ calibración.
 | `H` · `I` · `L` | horizonte (la cruceta ajusta inclinación/nivel y L1/R1 el giro) · información · biblioteca |
 | `S` | aleatorio sí/no |
 | `V` | vista visor VR / pantalla |
+| `E` | modo edición sí/no |
+
+En **modo edición** cambian algunos botones: L3 / `K` marca el inicio y el fin de un corte, L2 / R2
+van al corte anterior / siguiente, ← / → mueven ±1 s y L1 / R1 ±10 s.
 
 ### Fuera del visor (pantalla táctil)
 
 - El botón **☰** muestra u oculta los controles táctiles (en vista «pantalla» basta tocar el vídeo).
-- Arriba: lista, vista, Formato, Marcas, Horizonte, Audio y subt., Info, Biblioteca, Ajustes,
-  «✎ Nombrar marca» y ocultar. Abajo: barra de progreso con las marcas y los botones de reproducción.
+- Arriba: lista, vista, **✂ Editar**, Formato, Marcas (o Cortes en edición), Horizonte, Audio y subt.,
+  Info, Biblioteca, Ajustes, «✎ Nombrar marca» y ocultar. Abajo: barra de progreso con las marcas (o
+  los cortes) y los botones de reproducción.
 - Las ventanas son las mismas que en el visor; los deslizadores se arrastran con el dedo. En
   Ajustes → Datos, tocar «Usar en carpeta» también permite **renombrar** el perfil.
 - **Perfil del visor**: en la pantalla de la lista, botón «Visor: escanear su código QR». Elige una
   foto del código impreso en el visor (o escribe su dirección); se configuran la distorsión, el
   campo de visión y la separación de lentes.
+
+## Modo edición: marcar lo que sobra y cortarlo en la computadora
+
+Cortar un video sin perder calidad es demasiado trabajo para el teléfono, así que el visor solo
+**marca** y la computadora **corta**:
+
+1. En la barra del reproductor pulsa **✂ Editar** (tecla `E`). El título dice «✂ Edición» y la barra
+   ya no muestra las marcas de favoritos, sino los **cortes en rojo**, para no confundirlos.
+2. Ve al inicio de la parte que sobra y pulsa **✂ Inicio de corte**; ve al final (◀ 1 s / 1 s ▶ para
+   afinar) y pulsa **✂ Fin del corte**. Lo que se va a quitar se ve en verde mientras lo marcas.
+   En la ventana **Cortes** también están **✂ Principio → aquí** (quitar la intro), **✂ Aquí → final**,
+   las miniaturas de cada corte (mirar una salta a su inicio) y «Borrar: sí» para quitar uno.
+3. **Saltar cortes: sí** (por defecto) salta las partes marcadas al reproducir, también en modo
+   visión: así ves cómo quedará el video antes de cortarlo. Saltar a mano dentro de un corte sí lo
+   muestra.
+4. Pulsa **✓ Terminar edición** para volver a ver el video normal.
+5. En la computadora, abre el video en **VrCut** (archivo local o en el teléfono por USB): los cortes
+   aparecen en el timeline y las marcas del visor en amarillo. Al exportar, VrCut corta el video y
+   reescribe `vrview.json`: **las marcas y la posición se mueven con los cortes** (una marca en 8:00
+   con 0:00–3:00 cortado queda en 5:00; una marca que estaba dentro de un corte queda en el punto del
+   corte) y los cortes ya aplicados se borran.
+
+Los cortes se guardan con la **duración del archivo** al marcarlos: si el archivo cambió (otra
+versión, ya cortado), el visor avisa y no los salta, y VrCut no los carga. Si VrCut reescribe
+`vrview.json` mientras VrView está abierto, la app lo nota al volver a ella y recarga marcas y cortes
+en lugar de sobrescribirlos.
+
+Para que VrCut vea los cortes, el video debe estar en una **carpeta elegida** en la lista (los videos
+abiertos con «Abrir con…» guardan sus datos dentro de la app).
+
+## Navegador: videos de sitios web en el visor de VrView
+
+Algunos sitios de videos VR tienen su propio visor web y no siempre dejan descargar el archivo. Con
+**🌐 Navegador** (en la pantalla de la lista) los abres dentro de VrView:
+
+- **☆ Sitio / ★ Sitio** guarda o quita la página de los favoritos; **★ Favoritos** los lista
+  (mantén pulsado uno para renombrarlo o borrarlo).
+- Reproduce el video en la página unos segundos y pulsa **🎬 Videos (n)**: aparecen las direcciones
+  de video que usó la página (archivos MP4/WebM/MOV y streams HLS `.m3u8`). Para cada uno:
+  **▶ Ver en el visor de VrView**, **★ Guardar en Videos web**, **⬇ Descargar** (solo archivos;
+  se guardan en *Descargas/VrView*, carpeta que luego puedes elegir en la lista) o copiar el enlace.
+  Si el sitio ofrece su propio botón de descarga, VrView también lo atiende.
+- Los **★ Videos web** guardados están en la pantalla de la lista y, dentro del visor, en la
+  **Biblioteca** como la carpeta «★ Videos web». Recuerdan posición, formato, marcas y horizonte
+  como cualquier video. Usa etiquetas en el nombre (`_180_LR`…) para que el formato salga solo.
+- Las direcciones de stream suelen **caducar**. Si un video guardado deja de cargar, mantenlo
+  pulsado en «★ Videos web» → **Abrir su página** y vuelve a reproducirlo o guardarlo: el enlace se
+  renueva y se conservan su nombre y lo recordado.
+
+Se envían las mismas cookies, agente y página de origen que usa el navegador, así que funcionan los
+sitios en los que inicias sesión. No funcionan los videos protegidos con DRM, los streams DASH
+(`.mpd`, el reproductor del sistema no los soporta) ni las transmisiones que el sitio arma por
+partes sin una dirección propia.
 
 ## El formato: dónde vive y cómo se decide
 
@@ -139,14 +199,16 @@ la versión anterior se convierte solo.
       "position": 768000,
       "format": { "projection": "180", "eyes": "sbs", "coverage": [180, 150] },
       "horizon": { "pitch": 2, "roll": -3.5, "yaw": 0 },
-      "spots": [ 135000, { "at": 1214000, "name": "Muelle" } ]
+      "spots": [ 135000, { "at": 1214000, "name": "Muelle" } ],
+      "cuts": { "duration": 1800000, "ranges": [ [0, 42000], [900000, 960000] ] }
     }
   }
 }
 ```
 
 `projection`: `flat`, `180`, `360`, `fisheye` (+ `fov`, `lens`, `center`, `radius`), `eac`,
-`cubemap`, `mesh`. `eyes`: `mono`, `sbs`, `tb` (+ `"swap": true`). Tiempos en milisegundos, ángulos
+`cubemap`, `mesh`. `eyes`: `mono`, `sbs`, `tb` (+ `"swap": true`). `cuts`: partes a quitar
+(`[desde, hasta]`) y la duración del archivo cuando se marcaron. Tiempos en milisegundos, ángulos
 en grados. Los ajustes generales (visor, controles, seguimiento) se guardan en la app.
 
 Si elegiste la carpeta con una versión antigua (solo lectura), **vuelve a elegirla** para darle
@@ -258,6 +320,9 @@ VrView/
 ├── src/
 │   ├── VrView.Core/            # net10.0, sin Android: lógica pura y testeable
 │   │   ├── Playlist.cs          # orden, aleatorio, repetición
+│   │   ├── CutList.cs           # cortes: unir, saltar al reproducir y reacomodar tiempos (Remap)
+│   │   ├── FolderSettingsLocator.cs # dónde está el vrview.json de un video (para VrCut)
+│   │   ├── WebMedia.cs          # detección de videos en páginas, favoritos web, direcciones
 │   │   ├── FormatDetector.cs    # etiquetas del nombre y proporciones → formato
 │   │   ├── FormatResolver.cs    # video → perfil/carpeta → metadatos → etiquetas → proporción
 │   │   ├── VideoFormat.cs       # proyección, estéreo, ajuste fino, recorte por ojo
@@ -273,7 +338,9 @@ VrView/
 │   │   └── VrMath.cs …          # sensor → cámara, recentrar, horizonte, proyección
 │   └── VrView/                 # net10.0-android: la app
 │       ├── MainActivity.cs      # carpeta, lista, continuar, perfil del visor por QR
-│       ├── PlayerActivity*.cs   # reproducción, ventanas y sus acciones, entrada
+│       ├── PlayerActivity*.cs   # reproducción, ventanas y sus acciones, entrada, modo edición
+│       ├── BrowserActivity.cs   # navegador, favoritos, detección y descarga de videos
+│       ├── WebVideosDialog.cs, WebHeaders.cs  # videos web guardados; cookies y origen
 │       ├── HeadTracker.cs       # sensores con anti-deriva
 │       ├── VideoFrames.cs, LibraryThumbs.cs, MediaInfoReader.cs
 │       ├── WindowView.cs        # las ventanas en la pantalla táctil
@@ -290,4 +357,5 @@ VrView/
   mallas VR180 incrustadas se probaron con archivos sintéticos.
 - Los enlaces cortos `goo.gl` de algunos visores antiguos ya no funcionan (Google los apagó);
   en ese caso escribe la dirección completa del perfil.
-- Sin reproducción por red (DLNA/SMB/HTTP) ni fotos.
+- Sin DLNA/SMB ni fotos. Los videos web (HTTP/HLS) se ven, pero sin miniaturas, sin metadatos VR del
+  archivo y sin DASH ni DRM.
