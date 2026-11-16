@@ -35,7 +35,7 @@ public class WindowsTests
                 for (int t = 0; t < Windows.SettingsTabs.Length; t++) yield return [w, t, Projection.Fisheye];
             else if (w == WindowKind.Format)
                 foreach (var p in Enum.GetValues<Projection>()) yield return [w, 0, p];
-            else yield return [w, 0, Projection.Fisheye];
+            else if (w != WindowKind.Browser) yield return [w, 0, Projection.Fisheye]; // built from its own model
         }
     }
 

@@ -19,7 +19,8 @@ internal sealed record RenderConfig(
     int CalibrationStep = 0,
     Mesh? EmbeddedLeft = null,
     Mesh? EmbeddedRight = null,
-    string? Subtitle = null)
+    string? Subtitle = null,
+    float FlatScale = 1f)
 {
     public static RenderConfig Default => new(VideoFormat.Default, 0, 0, 0, 0, 0, new ViewSettings());
 }

@@ -28,10 +28,14 @@ public enum MenuAction
     AudioTrack, SubtitleTrack,
     // Moves the current video to the trash (Android asks for confirmation)
     DeleteVideo,
+    // VR browser: page navigation, sites (Arg = site index / page step), VR fullscreen (Arg = format index)
+    WebBack, WebForward, WebReload, WebScrollUp, WebScrollDown, WebZoomOut, WebZoomIn, WebSites, WebSite, WebSitesPage,
+    WebFullscreen, WebExitFullscreen, WebFormats, WebFormat, WebBigScreen, WebPlayPause, WebBack10, WebFwd10, WebPlayer,
+    WebPhone, WebStar,
 }
 
 /// <summary>The windows of the VR interface (and of the touch overlay).</summary>
-public enum WindowKind { Player, Format, Spots, Info, Settings, Library, Horizon, Calibration, Tracks, Cuts }
+public enum WindowKind { Player, Format, Spots, Info, Settings, Library, Horizon, Calibration, Tracks, Cuts, Browser }
 
 /// <summary>How an element looks and reacts.</summary>
 public enum UiKind

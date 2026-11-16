@@ -172,6 +172,38 @@ sitios en los que inicias sesión. No funcionan los videos protegidos con DRM, l
 (`.mpd`, el reproductor del sistema no los soporta) ni las transmisiones que el sitio arma por
 partes sin una dirección propia.
 
+## Navegador VR: la web flotando dentro del visor
+
+**🥽 Navegador VR** (en la pantalla de la lista, o **🥽 En VR** en el navegador del teléfono para
+seguir en la misma página) abre la web **dentro del visor**: la página flota frente a ti como una
+pantalla grande y, debajo, tiene una barra.
+
+- **Clic**: apunta con la retícula y pulsa el botón del visor (o toca la pantalla). Los botones de
+  la barra también se pulsan mirándolos, como en el resto de VrView.
+- **Barra**: ◀ Atrás, Adelante ▶, ⟳, **▲ Subir / ▼ Bajar** (desplaza la página o el recuadro que
+  está en medio), zoom − / ＋, Recentrar, **★ Favoritos** y **☆ Sitio**. También están
+  **🎬 Reproductor**, que abre en el reproductor de VrView el video que detectó la página, y
+  **📱 Pantalla del teléfono**, que vuelve al navegador normal para escribir una dirección o iniciar
+  sesión. Las sesiones y cookies son las mismas en los dos navegadores.
+- **Pantalla completa en VR**: el botón ⛶ del reproductor del sitio ya no manda el video a la
+  pantalla del teléfono, sino que lo muestra en el visor. **⛶ Video en VR** hace lo mismo con
+  cualquier video de la página, aunque el sitio no tenga pantalla completa. La página toma la forma
+  del video y se dibuja con el mismo motor del reproductor. En **Formato** eliges cómo se ve: pantalla
+  de cine (con **Pantalla grande**), 180°, 360°, ojo de pez o cubemap, en 2D o en 3D (lado a lado o
+  arriba-abajo). VrView recuerda el formato elegido para cada sitio. Si el título de la página trae
+  etiquetas (`180 SBS`, `360`…), lo toma solo.
+- En pantalla completa, un toque muestra u oculta la barra: ◀◀ 10 s, ▶/II, 10 s ▶▶, Recentrar,
+  Formato y ✕ Salir. La barra se oculta sola a los pocos segundos.
+- **Mando o teclado**: A / Enter = clic, B / Esc = atrás, ▲ / ▼ = desplazar, Y / R = recentrar,
+  L1 / F = entrar o salir de **⛶ Video en VR**, X / Menú = mostrar la barra, Espacio = ▶/II y, en
+  pantalla completa, ◀ / ▶ = 10 s atrás o adelante.
+
+Como se ve la imagen que dibuja la página, aquí sí se pueden ver videos que el reproductor del
+sistema no abre: los streams armados por partes o los de sitios que no dan la dirección del archivo.
+La calidad es la de la página (hasta 2048 px por el lado largo). Para la mejor calidad, saltos y
+marcas, usa **🎬 Reproductor** cuando esté disponible. Con el teléfono en el visor no se puede
+escribir: usa los favoritos o **📱 Pantalla del teléfono**.
+
 ## El formato: dónde vive y cómo se decide
 
 El editor guarda en el lugar que elijas abajo: **Solo este video**, **Toda la carpeta** (los videos

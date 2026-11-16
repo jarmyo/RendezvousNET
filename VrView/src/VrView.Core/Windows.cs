@@ -7,7 +7,7 @@ namespace VrView.Core;
 /// a panel inside the headset and on the touch screen, so both always offer the same functions.
 /// Layout is in window fractions; the header band (title + subtitle) is 0.14 m tall.
 /// </summary>
-public static class Windows
+public static partial class Windows
 {
     public const float HeaderMeters = 0.14f;
     public static string[] SettingsTabs => [T("Viewer"), T("Controls"), T("Tracking"), T("Quality"), T("Data")];

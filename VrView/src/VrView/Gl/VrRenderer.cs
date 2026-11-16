@@ -68,6 +68,13 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     public volatile float VideoFps;
     /// <summary>Duration of the video, for the seek preview time.</summary>
     public volatile int DurationMsForPreview;
+    /// <summary>
+    /// Set by the VR browser: a click that misses the window but lands on the flat picture (the web page) is
+    /// reported here with page coordinates (0..1, origin top-left) instead of closing the window. GL thread.
+    /// </summary>
+    public volatile Action<float, float>? ContentClick;
+    /// <summary>When set (degrees), windows sit straight under the picture at this pitch instead of where the user looks.</summary>
+    public volatile float AnchoredWindowPitch = float.NaN;
 
     private volatile bool _recenterRequested, _recenterPitchToo;
     private volatile bool _frameAvailable;
@@ -184,7 +191,13 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             else _host.OnMenuRequested();
             return;
         }
-        var hit = HitWindow(w, VrMath.Forward(CurrentView()), Config);
+        var forward = VrMath.Forward(CurrentView());
+        var hit = HitWindow(w, forward, Config);
+        if (hit.Action == MenuAction.None && ContentClick is { } click && ContentHit(forward, Config) is { } page)
+        {
+            click(page.X, page.Y);
+            return;
+        }
         _host.OnMenuAction(hit.Action == MenuAction.None ? MenuAction.Hide : hit.Action, hit.Fraction, hit.Arg);
     }
 
@@ -435,6 +448,16 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         return VrMath.PanelHit(forward, _menuYaw, _menuPitch, PanelDistance, pw, ph) is { } h ? w.HitTest(h.X, h.Y) : UiHit.None;
     }
 
+    /// <summary>Where the reticle is on a flat, single-picture video (the VR browser's page), or null.</summary>
+    private Vector2? ContentHit(Vector3 forward, RenderConfig cfg)
+    {
+        var f = cfg.Format;
+        if (f.Projection != Projection.Flat || f.Stereo != StereoMode.Mono) return null;
+        float width = FlatWidth * cfg.FlatScale, height = width / Math.Max(f.EyeAspect(cfg.VideoWidth, cfg.VideoHeight), 0.1f);
+        return VrMath.PanelHit(forward, _recenterYaw, _recenterPitch, FlatDistance, width, height) is { } p &&
+               p.X >= 0 && p.X <= 1 && p.Y >= 0 && p.Y <= 1 ? p : null;
+    }
+
     private bool IsAdjusting() => _hovered >= 0 && _shownWindow is { } w && _hovered < w.Elements.Count &&
                                   w.Elements[_hovered].Action is MenuAction.ParamSet or MenuAction.ParamMinus or MenuAction.ParamPlus;
 
@@ -447,10 +470,11 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             // Opening: put the window in front of the user. The calibration wizard sits lower so the
             // targets stay in the middle of the view.
             _menuYaw = VrMath.YawOf(forward);
-            float pitch = VrMath.PitchOf(forward);
+            // Measured from the front of the picture: after a recenter lying down, that front is up or down.
+            float pitch = VrMath.PitchOf(forward) - _recenterPitch;
             _menuPitch = w.Kind == WindowKind.Calibration
                 ? -22f * VrMath.Deg2Rad
-                : Math.Clamp(pitch < LookDownOpenAngle ? -25f * VrMath.Deg2Rad : pitch, -50f * VrMath.Deg2Rad, 50f * VrMath.Deg2Rad);
+                : _recenterPitch + Math.Clamp(pitch < LookDownOpenAngle ? -25f * VrMath.Deg2Rad : pitch, -50f * VrMath.Deg2Rad, 50f * VrMath.Deg2Rad);
             _dwell.Reset();
             _idleSeconds = 0;
         }
@@ -460,6 +484,12 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             if (w.Kind == WindowKind.Calibration) _menuPitch = -22f * VrMath.Deg2Rad;
         }
         _shownWindow = w;
+        if (w is not null && !float.IsNaN(AnchoredWindowPitch))
+        {
+            // The VR browser's bar stays under the page, also after recentering.
+            _menuYaw = _recenterYaw;
+            _menuPitch = _recenterPitch + AnchoredWindowPitch * VrMath.Deg2Rad;
+        }
 
         if (w is null)
         {
@@ -727,7 +757,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         bool dense = cfg.View.DenseMesh;
         float aspect = f.Projection == Projection.Flat ? f.EyeAspect(cfg.VideoWidth, cfg.VideoHeight) : 0f;
         // Only the geometry-relevant part of the format: eye packing and the nadir patch do not change the mesh.
-        object key = (f with { Stereo = StereoMode.Mono, SwapEyes = false, NadirDeg = 0 }, aspect, dense, cfg.EmbeddedLeft, cfg.EmbeddedRight);
+        object key = (f with { Stereo = StereoMode.Mono, SwapEyes = false, NadirDeg = 0 }, aspect, dense, cfg.EmbeddedLeft, cfg.EmbeddedRight, cfg.FlatScale);
         if (_videoMesh is not null && key.Equals(_videoMeshKey)) return;
         _videoMesh?.Dispose();
         _videoMeshRight?.Dispose();
@@ -749,7 +779,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
                 if (cfg.EmbeddedRight is not null) _videoMeshRight = new GlMesh(SphericalMetadata.Scale(cfg.EmbeddedRight, SphereRadius));
                 break;
             case Projection.Mesh: mesh = MeshBuilder.Equirect(SphereRadius, 180f, 44 * k, 32 * k); break;
-            default: mesh = MeshBuilder.Quad(FlatWidth, FlatWidth / Math.Max(aspect, 0.1f), FlatDistance); break;
+            default: mesh = MeshBuilder.Quad(FlatWidth * cfg.FlatScale, FlatWidth * cfg.FlatScale / Math.Max(aspect, 0.1f), FlatDistance); break;
         }
         _videoMesh = new GlMesh(mesh);
         _videoMeshKey = key;

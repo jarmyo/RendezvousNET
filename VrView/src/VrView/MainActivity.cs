@@ -40,7 +40,7 @@ public class MainActivity : Activity
         AppLanguage.Apply(this);
         _settings = new AppSettings(this);
         _store = new VideoStore(this, _settings);
-        SetContentView(BuildLayout());
+        SetContentView(SystemBarsPadding.Apply(BuildLayout()));
         UpdateToggleLabels();
         _tipJar = new TipJar(this);
         _ = _tipJar.FinishPendingAsync();
@@ -119,6 +119,8 @@ public class MainActivity : Activity
 
         var row3 = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         row3.AddView(MakeButton(T("🌐 Browser"), (_, _) => StartActivity(BrowserActivity.CreateIntent(this))),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
+        row3.AddView(MakeButton(T("🥽 VR browser"), (_, _) => StartActivity(VrBrowserActivity.CreateIntent(this))),
             new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         row3.AddView(MakeButton(T("★ Web videos"), (_, _) =>
                 WebVideosDialog.Show(this, _settings, url => StartActivity(BrowserActivity.CreateIntent(this, url)))),

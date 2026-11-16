@@ -63,7 +63,7 @@ public class BrowserActivity : Activity
     {
         base.OnCreate(savedInstanceState);
         _settings = new AppSettings(this);
-        SetContentView(BuildLayout());
+        SetContentView(SystemBarsPadding.Apply(BuildLayout()));
         SetupWebView();
         if (OperatingSystem.IsAndroidVersionAtLeast(33))
             OnBackInvokedDispatcher.RegisterOnBackInvokedCallback(0, new BackCallback(GoBackOrClose));
@@ -165,6 +165,7 @@ public class BrowserActivity : Activity
         _starButton = SmallButton(T("☆ Site"), (_, _) => ToggleSiteBookmark());
         _videosButton = SmallButton("", (_, _) => ShowVideos());
         foreach (var b in new[] { _starButton, SmallButton(T("★ Favorites"), (_, _) => ShowFavorites()), _videosButton,
+                                  SmallButton(T("🥽 In VR"), (_, _) => OpenInVr()),
                                   SmallButton(T("✕ Close"), (_, _) => Finish()) })
             actions.AddView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         root.AddView(actions);
@@ -363,6 +364,14 @@ public class BrowserActivity : Activity
         _web.EvaluateJavascript(PauseScript, null);
         CookieManager.Instance?.Flush();
         StartActivity(PlayerActivity.CreateIntent(this, [item], 0));
+    }
+
+    /// <summary>The same page in the browser inside the headset (logins and cookies are shared).</summary>
+    private void OpenInVr()
+    {
+        _web.EvaluateJavascript(PauseScript, null);
+        CookieManager.Instance?.Flush();
+        StartActivity(VrBrowserActivity.CreateIntent(this, _pageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? _pageUrl : null));
     }
 
     private void SaveVideo(DetectedMedia media)

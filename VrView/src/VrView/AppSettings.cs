@@ -220,6 +220,11 @@ internal sealed class AppSettings
         set => Edit(e => e.PutString("lastWebUrl", value));
     }
 
+    /// <summary>Format last chosen for videos of a site in the VR browser's fullscreen.</summary>
+    public VideoFormat? WebFormat(string host) => VideoFormat.TryParse(_prefs.GetString("webFormat." + host, null));
+
+    public void SetWebFormat(string host, VideoFormat format) => Edit(e => e.PutString("webFormat." + host, format.Serialize()));
+
     /// <summary>Cardboard URL of the scanned viewer, or null.</summary>
     public string? ViewerUrl
     {
