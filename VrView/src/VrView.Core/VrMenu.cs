@@ -32,6 +32,12 @@ public enum MenuAction
     WebBack, WebForward, WebReload, WebScrollUp, WebScrollDown, WebZoomOut, WebZoomIn, WebSites, WebSite, WebSitesPage,
     WebFullscreen, WebExitFullscreen, WebFormats, WebFormat, WebBigScreen, WebPlayPause, WebBack10, WebFwd10, WebPlayer,
     WebPhone, WebStar,
+    // VR browser: address bar and keyboard (WebKey: Arg = character; KeyLayer: Arg = KeyboardLayer)
+    WebAddress, WebKeyboard, WebKey, WebKeyText, WebBackspace, WebEnter, WebShift, WebKeyLayer, WebCaretLeft, WebCaretRight,
+    // VR browser: the options of a list of the page (<select>); WebOption: Arg = option index
+    WebOption, WebOptionsPage,
+    // VR browser: a message of the page (alert / confirm)
+    WebDialogOk, WebDialogCancel,
 }
 
 /// <summary>The windows of the VR interface (and of the touch overlay).</summary>

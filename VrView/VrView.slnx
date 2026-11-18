@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/VrView.Core/VrView.Core.csproj" />
     <Project Path="src/VrView/VrView.csproj" />
+    <Project Path="src/VrBrowser/VrBrowser.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/VrView.Core.Tests/VrView.Core.Tests.csproj" />

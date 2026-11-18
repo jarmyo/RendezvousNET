@@ -18,6 +18,8 @@ namespace VrView;
 /// </summary>
 internal sealed class WebSurface : IDisposable
 {
+    /// <summary>KeyCharacterMap.VIRTUAL_KEYBOARD: the device id of keys that no real keyboard sent.</summary>
+    private const int VirtualKeyboard = -1;
     private readonly VirtualDisplay _display;
     private readonly Presentation _presentation;
     private readonly FrameLayout _root;
@@ -45,6 +47,10 @@ internal sealed class WebSurface : IDisposable
         _root.AddView(Web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
         _presentation.SetContentView(_root);
         _presentation.SetCancelable(false);
+        // The phone's on-screen keyboard must not open over the headset view: typing comes from the VR keyboard.
+        _presentation.Window?.AddFlags(WindowManagerFlags.AltFocusableIm);
+        Web.Focusable = true;
+        Web.FocusableInTouchMode = true;
         _presentation.Show();
     }
 
@@ -111,6 +117,36 @@ internal sealed class WebSurface : IDisposable
         float yEnd = y0 + dy;
         _handler.PostDelayed(() => Send(t, SystemClock.UptimeMillis(), MotionEventActions.Move, x, yEnd), steps * stepMs + 60);
         _handler.PostDelayed(() => Send(t, SystemClock.UptimeMillis(), MotionEventActions.Up, x, yEnd), steps * stepMs + 80);
+    }
+
+    /// <summary>A key press (down and up), for the focused element of the page.</summary>
+    public void Key(Keycode code)
+    {
+        long t = SystemClock.UptimeMillis();
+        DispatchKey(new KeyEvent(t, t, KeyEventActions.Down, code, 0));
+        DispatchKey(new KeyEvent(t, SystemClock.UptimeMillis(), KeyEventActions.Up, code, 0));
+    }
+
+    /// <summary>Types text with key presses (for frames of other sites, which scripts cannot reach).</summary>
+    public void Type(string text)
+    {
+        var map = KeyCharacterMap.Load(VirtualKeyboard);
+        var events = map?.GetEvents(text.ToCharArray());
+        if (events is not null)
+        {
+            foreach (var ev in events) DispatchKey(ev);
+            return;
+        }
+        // Characters without a key (ñ, á…): one event that carries the text.
+#pragma warning disable CA1422 // ACTION_MULTIPLE is still how a view receives text without an input method.
+        DispatchKey(new KeyEvent(SystemClock.UptimeMillis(), text, VirtualKeyboard, 0));
+#pragma warning restore CA1422
+    }
+
+    private void DispatchKey(KeyEvent ev)
+    {
+        if (!Web.HasFocus) Web.RequestFocus();
+        _presentation.DispatchKeyEvent(ev);
     }
 
     private void Send(long downTime, long eventTime, MotionEventActions action, float x, float y)

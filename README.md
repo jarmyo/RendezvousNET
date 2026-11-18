@@ -4,10 +4,11 @@ Utilidades para video VR (180°, 360°, ojo de pez, estéreo) escritas en **C# c
 
 | Proyecto | Plataforma | Para qué sirve |
 |---|---|---|
-| [**VrView**](VrView/README.md) | Android (`net10.0-android`) | Reproductor de video VR para usar el móvil en un visor tipo Cardboard. Reproduce carpetas enteras como lista, con aleatorio y repetición, marca cortes en modo edición y ve videos de sitios web en su propio visor. |
+| [**VrView**](VrView/README.md) | Android (`net10.0-android`) | Reproductor de video VR para usar el móvil en un visor tipo Cardboard. Reproduce carpetas enteras como lista, con aleatorio y repetición, y marca cortes en modo edición. |
+| [**VrBrowser**](VrView/src/VrBrowser/README.md) | Android (`net10.0-android`) | Navegador para el visor: la página flota dentro del VR, el video de la página se ve en pantalla completa en VR y los videos detectados se mandan al reproductor de VrView. |
 | [**VrCut**](VrCut/README.md) | Mac y Windows (Avalonia) | Editor para quitar partes de videos MP4 **sin perder calidad** (`ffmpeg -c copy`), con archivos locales o directamente en el teléfono vía USB (adb). |
 
-Las dos herramientas trabajan juntas: en el visor (VrView, **modo edición**) marcas las partes que
+VrView y VrCut trabajan juntas: en el visor (VrView, **modo edición**) marcas las partes que
 sobran, y en la computadora VrCut las corta sin perder calidad y **mueve las marcas de favoritos**
 para que sigan en la misma escena (una marca en 8:00, con 0:00–3:00 cortado, queda en 5:00). Todo
 viaja en el `vrview.json` que VrView guarda junto a los videos.
@@ -27,9 +28,7 @@ viaja en el `vrview.json` que VrView guarda junto a los videos.
 - **Biblioteca, marcas, horizonte, audio y subtítulos** desde el visor, sin quitárselo.
 - **Modo edición** (interruptor aparte, para no mezclar con las marcas de favoritos): marca las
   partes a quitar, salta o muestra esas partes al reproducir y deja el corte a VrCut.
-- **Navegador** con sitios favoritos: detecta el video (MP4 o stream HLS) que reproduce una página
-  para verlo en el visor de VrView, guardarlo en «★ Videos web» (también en la Biblioteca del visor)
-  o descargarlo.
+- **Videos web** que le manda VrBrowser, con las cookies del sitio.
 - **Perfil del visor por código QR**, asistente de calibración de lentes y menú.
 - Controles por mirada, toque, mando Bluetooth o teclado.
 
@@ -37,6 +36,16 @@ Sin Unity ni MAUI: solo el SDK de Android, OpenGL ES 2.0, `MediaPlayer` y ZXing.
 La lógica independiente de Android vive en `VrView.Core` y tiene pruebas xUnit.
 
 Más detalles, controles y cómo compilar e instalar: [VrView/README.md](VrView/README.md).
+
+## VrBrowser — la web dentro del visor
+
+App aparte, hermana de VrView: navegador con sitios favoritos que detecta el video (MP4 o stream
+HLS) de una página para verlo en VrView, guardarlo o descargarlo, y que con **🥽 En VR** pone la
+página flotando dentro del visor, con los videos incrustados en pantalla completa en VR (cine,
+180°, 360°, 2D o 3D). Usa la configuración del visor de VrView, así que se configura una sola vez.
+Comparte con VrView el motor VR y `VrView.Core`.
+
+Detalles: [VrView/src/VrBrowser/README.md](VrView/src/VrBrowser/README.md).
 
 ## VrCut — cortes sin pérdida
 
@@ -81,6 +90,7 @@ RendezvousNET/
 ├── VrView/                    # reproductor VR para Android
 │   ├── src/VrView.Core/       # lógica pura (net10.0), testeable; VrCut también la usa
 │   ├── src/VrView/            # la app Android
+│   ├── src/VrBrowser/         # el navegador VR (app aparte, comparte el motor de VrView)
 │   └── tests/VrView.Core.Tests/
 └── VrCut/                     # editor de cortes sin pérdida (Avalonia, Mac/Windows)
 ```

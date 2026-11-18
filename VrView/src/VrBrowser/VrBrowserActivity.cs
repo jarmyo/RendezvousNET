@@ -21,8 +21,8 @@ namespace VrView;
 /// 180°/360° video, also in 3D. The page is drawn by <see cref="WebSurface"/> into the renderer's
 /// texture, so even videos the system player cannot open (protected or in-page streams) can be seen.
 /// </summary>
-[Activity(Label = "VrView", Exported = false,
-    Name = "net.rendezvous.vrview.VrBrowserActivity",
+[Activity(Label = "@string/app_name", Exported = false,
+    Name = "net.rendezvous.vrbrowser.VrBrowserActivity",
     Theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen",
     ScreenOrientation = ScreenOrientation.SensorLandscape,
     LaunchMode = LaunchMode.SingleTop,
@@ -41,6 +41,69 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     private const float BarPitch = -27f;
     private const float BigScreenScale = 1.8f;
     private const long BarHideMs = 8000;
+    /// <summary>Pitch of the keyboard: lower than the bar, so the page stays in view while typing.</summary>
+    private const float KeyboardPitch = -40f;
+
+    // The focused element of the page, also inside shadow roots (frames from other sites cannot be read).
+    private const string FieldJs =
+        "function vrvField(){var e=document.activeElement;while(e&&e.shadowRoot&&e.shadowRoot.activeElement)" +
+        "e=e.shadowRoot.activeElement;return e;}" +
+        "function vrvSet(e,v){var d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');" +
+        "if(d&&d.set)d.set.call(e,v);else e.value=v;}" +
+        "function vrvSel(e){var s=e.value.length,n=s;try{if(typeof e.selectionStart==='number'){s=e.selectionStart;n=e.selectionEnd;}}catch(x){}return [s,n];}";
+
+    // What the keyboard writes into: k = f (a text field), i (a frame of another site) or nothing.
+    private const string FocusJs = "(function(){" + FieldJs +
+        "var e=vrvField();if(!e||e===document.body||e===document.documentElement)return {k:''};" +
+        "if(e.tagName==='IFRAME'||e.tagName==='FRAME')return {k:'i'};var t=(e.type||'').toLowerCase();" +
+        "var ed=e.isContentEditable||e.tagName==='TEXTAREA'||(e.tagName==='INPUT'&&" +
+        "!/^(button|submit|checkbox|radio|range|color|file|image|reset|hidden)$/.test(t));if(!ed)return {k:''};" +
+        "var v=e.isContentEditable?e.innerText:(e.value||''),c=-1;if(!e.isContentEditable)c=vrvSel(e)[0];" +
+        "var lab='';try{if(e.labels&&e.labels[0])lab=e.labels[0].innerText;}catch(x){}" +
+        "return {k:'f',v:String(v).slice(0,2000),c:c,h:String(e.placeholder||e.getAttribute('aria-label')||lab||e.title||'').slice(0,80)," +
+        "p:t==='password'};})()";
+
+    /// <summary>Writes text at the caret of the focused field, as typing would (the page sees input events).</summary>
+    private static string InsertJs(string text) => "(function(t){" + FieldJs +
+        "var e=vrvField();if(!e||e.tagName==='IFRAME'||e.tagName==='FRAME')return 0;" +
+        "try{if(document.execCommand('insertText',false,t))return 1;}catch(x){}" +
+        "if(!('value' in e))return 0;var r=vrvSel(e);vrvSet(e,e.value.slice(0,r[0])+t+e.value.slice(r[1]));" +
+        "try{e.setSelectionRange(r[0]+t.length,r[0]+t.length);}catch(x){}" +
+        "e.dispatchEvent(new InputEvent('input',{bubbles:true,data:t,inputType:'insertText'}));return 1;})(" +
+        WebInput.JsString(text) + ")";
+
+    private const string BackspaceJs = "(function(){" + FieldJs +
+        "var e=vrvField();if(!e||e.tagName==='IFRAME'||e.tagName==='FRAME')return 0;" +
+        "try{if(document.execCommand('delete',false))return 1;}catch(x){}" +
+        "if(!('value' in e))return 0;var r=vrvSel(e),s=r[0]===r[1]?Math.max(0,r[0]-1):r[0];" +
+        "vrvSet(e,e.value.slice(0,s)+e.value.slice(r[1]));try{e.setSelectionRange(s,s);}catch(x){}" +
+        "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));return 1;})()";
+
+    private static string CaretJs(int step) => "(function(){" + FieldJs +
+        "var e=vrvField();if(!e||!('value' in e)||e.isContentEditable)return 0;var c=vrvSel(e)[0]+(" + step + ");" +
+        "c=Math.max(0,Math.min(e.value.length,c));try{e.setSelectionRange(c,c);return 1;}catch(x){return 0;}})()";
+
+    // A list of the page (<select>) under the point clicked: Android would open its choices in a window
+    // that the viewer does not show, so they are shown in the VR window instead (k = s, o = [text, selected, enabled]).
+    private const string OptionsJs =
+        "function vrvOpts(e){var lab='';try{if(e.labels&&e.labels[0])lab=e.labels[0].innerText;}catch(x){}" +
+        "return {k:'s',m:!!e.multiple,h:String(e.getAttribute('aria-label')||lab||e.title||'').slice(0,80)," +
+        "o:[].slice.call(e.options,0,500).map(function(p){return [String(p.label||p.text||'').trim().slice(0,80),p.selected,!p.disabled];})};}";
+
+    private static string PickJs(float u, float v) => "(function(u,v){" + OptionsJs +
+        "var w=window.visualViewport,x=w?w.offsetLeft+u*w.width:u*innerWidth,y=w?w.offsetTop+v*w.height:v*innerHeight;" +
+        "var e=document.elementFromPoint(x,y);while(e&&e.shadowRoot){var n=e.shadowRoot.elementFromPoint(x,y);if(!n||n===e)break;e=n;}" +
+        "if(e&&e.tagName==='OPTION')e=e.parentElement;if(e&&e.tagName==='OPTGROUP')e=e.parentElement;" +
+        "if(!e||e.tagName!=='SELECT'||e.disabled)return {k:''};window.__vrvSelect=e;try{e.focus();}catch(x){}return vrvOpts(e);})(" +
+        Inv(u) + "," + Inv(v) + ")";
+
+    private static string ChooseJs(int index) => "(function(i){" + OptionsJs +
+        "var e=window.__vrvSelect;if(!e||!e.options[i])return {k:''};" +
+        "if(e.multiple)e.options[i].selected=!e.options[i].selected;else e.selectedIndex=i;" +
+        "e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));" +
+        "return vrvOpts(e);})(" + index + ")";
+
+    private static string Inv(float f) => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
     // Finds the video to show in fullscreen: the page's fullscreen element, else the playing / biggest
     // video, else the biggest frame (a video embedded from another site cannot be reached from the page).
@@ -97,6 +160,14 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     private int _progress = 100;
     private BrowserPane _pane = BrowserPane.Bar;
     private int _sitesPage;
+    private List<PageOption> _options = [];
+    private bool _optionsMultiple;
+    private string _optionsHint = "";
+    private int _optionsPage;
+    /// <summary>The page's alert or confirm being shown; it waits for an answer.</summary>
+    private Android.Webkit.JsResult? _dialog;
+    private string _dialogText = "";
+    private bool _dialogAsks;
 
     // VR fullscreen
     private bool _fullscreen, _barVisible = true, _bigScreen, _playing;
@@ -104,6 +175,16 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     private int _videoWidth, _videoHeight;
     private WebChromeClient.ICustomViewCallback? _customCallback;
     private long _lastActionAt;
+
+    // VR keyboard
+    private KeyboardTarget _kbTarget;
+    private KeyboardLayer _kbLayer;
+    private bool _kbShift;
+    private string _address = "";
+    private int _addressCaret;
+    private PageField _field = PageField.None;
+    // Kind of the focused element at the last look: the keyboard opens when a text field gets the focus.
+    private string _lastFieldKind = "";
 
     // Touch without the headset: drag to look around
     private float _downX, _downY, _lastX, _lastY;
@@ -123,6 +204,7 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     {
         base.OnCreate(savedInstanceState);
         AppLanguage.Apply(this);
+        ViewerLink.SyncSettings(this);
         Window!.AddFlags(WindowManagerFlags.KeepScreenOn | WindowManagerFlags.Fullscreen);
         if (OperatingSystem.IsAndroidVersionAtLeast(28))
             Window.Attributes!.LayoutInDisplayCutoutMode = LayoutInDisplayCutoutMode.ShortEdges;
@@ -199,6 +281,8 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     protected override void OnDestroy()
     {
         _handler.RemoveCallbacksAndMessages(null);
+        _dialog?.Cancel();
+        _dialog = null;
         if (_ready) _web.Dispose();
         base.OnDestroy();
     }
@@ -281,19 +365,35 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         // No previous/next buttons at the edges: there is no playlist here.
         var view = _settings.View(sw, sh) with { EdgeButtonsOn = false };
         _renderer.Config = new RenderConfig(format, _web.Width, _web.Height, 0, 0, 0, view, FlatScale: scale);
-        // The bar sits under the page; in fullscreen it opens where the user looks.
-        _renderer.AnchoredWindowPitch = _fullscreen ? float.NaN : BarPitch;
+        _renderer.AnchoredWindowPitch = WindowPitch();
     }
 
-    private BrowserUiModel Model() => new(_pane, _pageTitle, _pageUrl, _web.Web.CanGoBack(), _web.Web.CanGoForward(), _progress,
-        _media.Playable.Count(m => m.CanPlay), _settings.Bookmarks.FindSite(_pageUrl) is not null, _fullscreen, _format,
-        _bigScreen, _playing, _settings.Bookmarks.Sites, _sitesPage);
+    private BrowserUiModel Model()
+    {
+        bool address = _kbTarget == KeyboardTarget.Address;
+        return new BrowserUiModel(_pane, _pageTitle, _pageUrl, _web.Web.CanGoBack(), _web.Web.CanGoForward(), _progress,
+            _media.Playable.Count(m => m.CanPlay), _settings.Bookmarks.FindSite(_pageUrl) is not null, _fullscreen, _format,
+            _bigScreen, _playing, _settings.Bookmarks.Sites, _sitesPage,
+            _kbTarget, _kbLayer, _kbShift,
+            Typed: address ? _address : _field.Value,
+            FieldHint: _pane == BrowserPane.Options ? _optionsHint : address ? "" : _field.Hint,
+            Password: !address && _field.Password,
+            Caret: address ? _addressCaret : _field.Caret,
+            Options: _options, MultipleChoice: _optionsMultiple, OptionsPage: _optionsPage,
+            DialogText: _dialogText, DialogAsks: _dialogAsks);
+    }
 
     private void RefreshWindow()
     {
+        // Any way out of the message (Back, a click outside, ✕…) is a "Cancel", so the page never waits forever.
+        if (_dialog is not null && _pane != BrowserPane.Dialog) AnswerDialog(false);
         bool hidden = _fullscreen && !_barVisible && _pane == BrowserPane.Bar;
+        _renderer.AnchoredWindowPitch = WindowPitch();
         _renderer.Window = hidden ? null : Windows.Browser(Model());
     }
+
+    /// <summary>The bar and the keyboard sit under the page; in fullscreen windows open where the user looks.</summary>
+    private float WindowPitch() => _fullscreen ? float.NaN : _pane == BrowserPane.Keyboard ? KeyboardPitch : BarPitch;
 
     private void Tick()
     {
@@ -303,6 +403,7 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
                 _barVisible = false;
             _web.Web.EvaluateJavascript(StateJs, new JsResult(OnVideoState));
         }
+        else PollField();
         RefreshWindow();
         _handler.PostDelayed(Tick, TickMs);
     }
@@ -374,8 +475,189 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     private void OnPageClick(float u, float v)
     {
         _lastActionAt = SystemClock.UptimeMillis();
-        if (_pane != BrowserPane.Bar) { _pane = BrowserPane.Bar; RefreshWindow(); return; }
+        if (_pane is BrowserPane.Sites or BrowserPane.Formats or BrowserPane.Options) { _pane = BrowserPane.Bar; RefreshWindow(); return; }
+        // Typing an address: a click on the page leaves it. Typing in the page: the click may pick another field.
+        if (_pane == BrowserPane.Keyboard && _kbTarget == KeyboardTarget.Address) { _pane = BrowserPane.Bar; RefreshWindow(); }
+        if (_fullscreen) { Click(u, v); return; }
+        // A list of the page opens its choices here; anything else gets the click.
+        _web.Web.EvaluateJavascript(PickJs(u, v), new JsResult(result =>
+        {
+            if (ShowOptions(result, resetPage: true)) return;
+            Click(u, v);
+        }));
+    }
+
+    private void Click(float u, float v)
+    {
+        _lastFieldKind = ""; // a click on a text field opens the keyboard again, also after closing it
         _web.Tap(u, v);
+        if (!_fullscreen) _handler.PostDelayed(PollField, 250);
+    }
+
+    /// <summary>Shows the choices of a list of the page (from <see cref="OptionsJs"/>); false when it is not one.</summary>
+    private bool ShowOptions(string? json, bool resetPage)
+    {
+        if (string.IsNullOrEmpty(json) || json == "null") return false;
+        try
+        {
+            var r = JsonDocument.Parse(json).RootElement;
+            if (r.ValueKind != JsonValueKind.Object || !r.TryGetProperty("k", out var k) || k.GetString() != "s") return false;
+            var options = new List<PageOption>();
+            if (r.TryGetProperty("o", out var o) && o.ValueKind == JsonValueKind.Array)
+                foreach (var item in o.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.Array && item.GetArrayLength() >= 3)
+                        options.Add(new PageOption(item[0].GetString() ?? "", item[1].ValueKind == JsonValueKind.True,
+                            item[2].ValueKind == JsonValueKind.True));
+            _options = options;
+            _optionsMultiple = r.TryGetProperty("m", out var m) && m.ValueKind == JsonValueKind.True;
+            _optionsHint = r.TryGetProperty("h", out var h) ? (h.GetString() ?? "").Trim() : "";
+            if (resetPage) _optionsPage = BrowserUiModel.PageOfSelected(options);
+            _pane = BrowserPane.Options;
+            RefreshWindow();
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return false;
+        }
+    }
+
+    // ---- Typing ----
+
+    private sealed record PageField(string Kind, string Value, int Caret, string Hint, bool Password)
+    {
+        public static PageField None { get; } = new("", "", -1, "", false);
+        /// <summary>A text field of the page itself (not inside a frame of another site).</summary>
+        public bool InPage => Kind == "f";
+        public bool Typable => Kind is "f" or "i";
+    }
+
+    /// <summary>Looks at the focused element: opens the keyboard on a new text field, closes it when the field is left.</summary>
+    private void PollField()
+    {
+        if (_fullscreen || IsDestroyed) return;
+        _web.Web.EvaluateJavascript(FocusJs, new JsResult(result =>
+        {
+            var field = ParseField(result);
+            string kind = field.Kind;
+            _field = field;
+            if (kind == "f" && _lastFieldKind != "f" && _pane == BrowserPane.Bar)
+                OpenKeyboard(KeyboardTarget.Page);
+            else if (!field.Typable && _pane == BrowserPane.Keyboard && _kbTarget == KeyboardTarget.Page)
+                _pane = BrowserPane.Bar;
+            _lastFieldKind = kind;
+            RefreshWindow();
+        }));
+    }
+
+    private static PageField ParseField(string? json)
+    {
+        if (string.IsNullOrEmpty(json) || json == "null") return PageField.None;
+        try
+        {
+            var r = JsonDocument.Parse(json).RootElement;
+            if (r.ValueKind != JsonValueKind.Object) return PageField.None;
+            string S(string n) => r.TryGetProperty(n, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() ?? "" : "";
+            int caret = r.TryGetProperty("c", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : -1;
+            bool password = r.TryGetProperty("p", out var pw) && pw.ValueKind == JsonValueKind.True;
+            return new PageField(S("k"), S("v"), caret, S("h").Trim(), password);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return PageField.None;
+        }
+    }
+
+    private void OpenKeyboard(KeyboardTarget target)
+    {
+        _kbTarget = target;
+        _kbLayer = KeyboardLayer.Letters;
+        _kbShift = false;
+        if (target == KeyboardTarget.Address)
+        {
+            _address = _pageUrl;
+            _addressCaret = _address.Length;
+        }
+        _pane = BrowserPane.Keyboard;
+    }
+
+    private void TypeText(string text)
+    {
+        if (_kbTarget == KeyboardTarget.Address)
+        {
+            _address = _address.Insert(Math.Clamp(_addressCaret, 0, _address.Length), text);
+            _addressCaret = Math.Clamp(_addressCaret, 0, _address.Length) + text.Length;
+            return;
+        }
+        // Script for the page's own fields (any character); real key presses for frames of other sites.
+        if (_field.InPage)
+            _web.Web.EvaluateJavascript(InsertJs(text), new JsResult(r => { if (r != "1") _web.Type(text); PollField(); }));
+        else _web.Type(text);
+    }
+
+    private void Backspace()
+    {
+        if (_kbTarget == KeyboardTarget.Address)
+        {
+            int at = Math.Clamp(_addressCaret, 0, _address.Length);
+            if (at > 0) { _address = _address.Remove(at - 1, 1); _addressCaret = at - 1; }
+            return;
+        }
+        if (_field.InPage)
+            _web.Web.EvaluateJavascript(BackspaceJs, new JsResult(r => { if (r != "1") _web.Key(Keycode.Del); PollField(); }));
+        else _web.Key(Keycode.Del);
+    }
+
+    private void MoveCaret(int step)
+    {
+        if (_kbTarget == KeyboardTarget.Address)
+        {
+            _addressCaret = Math.Clamp(_addressCaret + step, 0, _address.Length);
+            return;
+        }
+        if (_field.InPage)
+            _web.Web.EvaluateJavascript(CaretJs(step), new JsResult(r =>
+            {
+                if (r != "1") _web.Key(step < 0 ? Keycode.DpadLeft : Keycode.DpadRight);
+                PollField();
+            }));
+        else _web.Key(step < 0 ? Keycode.DpadLeft : Keycode.DpadRight);
+    }
+
+    private void Enter()
+    {
+        if (_kbTarget == KeyboardTarget.Address)
+        {
+            string url = WebAddress.FromInput(_address);
+            _pane = BrowserPane.Bar;
+            if (url.Length > 0) Load(url);
+            return;
+        }
+        // A real Enter: sends the form or adds a line, as the page expects.
+        _web.Key(Keycode.Enter);
+        _handler.PostDelayed(PollField, 300);
+    }
+
+    // ---- Messages of the page ----
+
+    /// <summary>Shows an alert or confirm of the page in the viewer (Android's own dialog would not be seen).</summary>
+    private void ShowDialog(string? message, Android.Webkit.JsResult result, bool asks)
+    {
+        _dialog?.Cancel();
+        _dialog = result;
+        _dialogText = message ?? "";
+        _dialogAsks = asks;
+        _pane = BrowserPane.Dialog;
+        if (_fullscreen) _barVisible = true;
+        RefreshWindow();
+    }
+
+    private void AnswerDialog(bool ok)
+    {
+        var dialog = _dialog;
+        _dialog = null;
+        if (ok) dialog?.Confirm(); else dialog?.Cancel();
+        if (_pane == BrowserPane.Dialog) _pane = BrowserPane.Bar;
     }
 
     // ---- Actions ----
@@ -428,6 +710,32 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
             case MenuAction.WebBack10: web.EvaluateJavascript(SeekJs(-10), null); break;
             case MenuAction.WebFwd10: web.EvaluateJavascript(SeekJs(10), null); break;
             case MenuAction.WebPlayer: OpenInPlayer(); break;
+            case MenuAction.WebAddress: OpenKeyboard(KeyboardTarget.Address); break;
+            case MenuAction.WebKeyboard:
+                if (_field.Typable) OpenKeyboard(KeyboardTarget.Page);
+                else Toast.MakeText(this, T("Nothing to type into: tap a text field of the page first"), ToastLength.Short)!.Show();
+                break;
+            case MenuAction.WebKey:
+                TypeText(BrowserUiModel.KeyText((char)arg, _kbShift));
+                _kbShift = false;
+                break;
+            case MenuAction.WebKeyText: TypeText(".com"); break;
+            case MenuAction.WebBackspace: Backspace(); break;
+            case MenuAction.WebEnter: Enter(); break;
+            case MenuAction.WebShift: _kbShift = !_kbShift; break;
+            case MenuAction.WebKeyLayer: _kbLayer = (KeyboardLayer)arg; _kbShift = false; break;
+            case MenuAction.WebCaretLeft: MoveCaret(-1); break;
+            case MenuAction.WebCaretRight: MoveCaret(1); break;
+            case MenuAction.WebDialogOk: AnswerDialog(true); break;
+            case MenuAction.WebDialogCancel: AnswerDialog(false); break;
+            case MenuAction.WebOptionsPage: _optionsPage = Math.Max(0, _optionsPage + arg); break;
+            case MenuAction.WebOption:
+                web.EvaluateJavascript(ChooseJs(arg), new JsResult(result =>
+                {
+                    // One choice closes the list; with several choices it stays open until Done.
+                    if (!ShowOptions(result, resetPage: false) || !_optionsMultiple) { _pane = BrowserPane.Bar; RefreshWindow(); }
+                }));
+                break;
             case MenuAction.WebPhone:
                 StartActivity(BrowserActivity.CreateIntent(this, _pageUrl));
                 Finish();
@@ -472,7 +780,7 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         }
         _web.Web.EvaluateJavascript("document.querySelectorAll('video,audio').forEach(function(v){try{v.pause()}catch(e){}})", null);
         CookieManager.Instance?.Flush();
-        StartActivity(PlayerActivity.CreateIntent(this, [item], 0));
+        ViewerLink.Play(this, [item], 0);
     }
 
     // ---- VR fullscreen ----
@@ -640,6 +948,7 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         var code = e.KeyCode;
         if (code is Keycode.VolumeUp or Keycode.VolumeDown or Keycode.VolumeMute) return base.DispatchKeyEvent(e);
         bool down = e.Action == KeyEventActions.Down && e.RepeatCount == 0;
+        if (TypeFromKeyboard(e)) return true;
         switch (code)
         {
             case Keycode.Back:
@@ -675,6 +984,31 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
                 return true;
         }
         return base.DispatchKeyEvent(e);
+    }
+
+    /// <summary>
+    /// A physical keyboard types where the VR keyboard writes (and opens it on a text field of the page).
+    /// Controller buttons do not type: they still click, go back and so on.
+    /// </summary>
+    private bool TypeFromKeyboard(KeyEvent e)
+    {
+        bool typing = _pane == BrowserPane.Keyboard || (!_fullscreen && _field.Typable);
+        if (!typing || KeyEvent.IsGamepadButton(e.KeyCode)) return false;
+        int unicode = e.GetUnicodeChar(e.MetaState);
+        bool special = e.KeyCode is Keycode.Del or Keycode.Enter or Keycode.NumpadEnter or Keycode.DpadLeft or Keycode.DpadRight;
+        if (unicode == 0 && !special) return false;
+        if (e.Action != KeyEventActions.Down) return true;
+        if (_pane != BrowserPane.Keyboard) OpenKeyboard(KeyboardTarget.Page);
+        switch (e.KeyCode)
+        {
+            case Keycode.Del: Backspace(); break;
+            case Keycode.Enter or Keycode.NumpadEnter: Enter(); break;
+            case Keycode.DpadLeft: MoveCaret(-1); break;
+            case Keycode.DpadRight: MoveCaret(1); break;
+            default: if (unicode >= ' ') TypeText(char.ConvertFromUtf32(unicode)); break;
+        }
+        RefreshWindow();
+        return true;
     }
 
     // ---- Web callbacks ----
@@ -728,6 +1062,20 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         }
 
         public override void OnHideCustomView() => a.OnHideCustomView();
+
+        public override bool OnJsAlert(WebView? view, string? url, string? message, Android.Webkit.JsResult? result)
+        {
+            if (result is null) return false;
+            a.ShowDialog(message, result, asks: false);
+            return true;
+        }
+
+        public override bool OnJsConfirm(WebView? view, string? url, string? message, Android.Webkit.JsResult? result)
+        {
+            if (result is null) return false;
+            a.ShowDialog(message, result, asks: true);
+            return true;
+        }
     }
 
     private sealed class JsResult(Action<string?> done) : Java.Lang.Object, IValueCallback

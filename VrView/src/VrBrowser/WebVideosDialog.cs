@@ -65,7 +65,7 @@ internal static class WebVideosDialog
         }
         var items = WebBookmarkItems.All(settings.Bookmarks);
         int index = Math.Max(0, items.FindIndex(i => i.StateKey == video.StateKey));
-        activity.StartActivity(PlayerActivity.CreateIntent(activity, items, index));
+        ViewerLink.Play(activity, items, index);
     }
 
     private static void Rename(Activity activity, AppSettings settings, string id, string title)

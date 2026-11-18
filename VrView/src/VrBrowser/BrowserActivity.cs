@@ -16,11 +16,11 @@ namespace VrView;
 /// <summary>
 /// A simple browser for sites with VR videos. While a page plays a video it notices the address of the
 /// stream or file (network requests and the page's video elements), so it can be watched in VrView's own
-/// viewer instead of the site's, saved as a web video (also listed in the headset's library) or, for
+/// viewer instead of the site's, saved as a web video or, for
 /// whole files, downloaded. Sites can be saved as favorites. Videos protected with DRM cannot be played.
 /// </summary>
-[Activity(Label = "Navegador", Exported = false,
-    Name = "net.rendezvous.vrview.BrowserActivity",
+[Activity(Label = "@string/app_name", MainLauncher = true, Exported = true,
+    Name = "net.rendezvous.vrbrowser.BrowserActivity",
     Theme = "@android:style/Theme.DeviceDefault.NoActionBar",
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.ScreenLayout |
                            ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden)]
@@ -62,6 +62,8 @@ public class BrowserActivity : Activity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+        AppLanguage.Apply(this);
+        ViewerLink.SyncSettings(this);
         _settings = new AppSettings(this);
         SetContentView(SystemBarsPadding.Apply(BuildLayout()));
         SetupWebView();
@@ -363,7 +365,7 @@ public class BrowserActivity : Activity
         }
         _web.EvaluateJavascript(PauseScript, null);
         CookieManager.Instance?.Flush();
-        StartActivity(PlayerActivity.CreateIntent(this, [item], 0));
+        ViewerLink.Play(this, [item], 0);
     }
 
     /// <summary>The same page in the browser inside the headset (logins and cookies are shared).</summary>
@@ -428,7 +430,7 @@ public class BrowserActivity : Activity
             request.SetNotificationVisibility(DownloadVisibility.VisibleNotifyCompleted);
             request.SetDestinationInExternalPublicDir(Android.OS.Environment.DirectoryDownloads, "VrView/" + name);
             (GetSystemService(DownloadService) as DownloadManager)!.Enqueue(request);
-            Toast.MakeText(this, F("Downloading “{0}” to Download/VrView (choose that folder in the list to watch it)", name), ToastLength.Long)!.Show();
+            Toast.MakeText(this, F("Downloading “{0}” to Download/VrView (choose that folder in VrView to watch it)", name), ToastLength.Long)!.Show();
         }
         catch (Exception ex) when (ex is Java.Lang.Exception or ArgumentException)
         {

@@ -727,9 +727,6 @@ public partial class PlayerActivity
 
     private LibraryState? _library;
 
-    /// <summary>Library "folder" with the saved web videos.</summary>
-    private const string WebFolder = "web:";
-
     private void EnsureLibrary()
     {
         if (_library is not null) return;
@@ -738,10 +735,9 @@ public partial class PlayerActivity
         lib.Trees = _settings.RecentFolders.Where(allowed.Contains).ToList();
         string? currentTree = Current is { } c ? MediaUtil.TreeOf(c.Location) : null;
         if (currentTree is not null && !lib.Trees.Contains(currentTree)) lib.Trees.Insert(0, currentTree);
-        if (_settings.Bookmarks.Videos.Count > 0) lib.Trees.Insert(0, WebFolder);
-        lib.Names = lib.Trees.Select(t => t == WebFolder ? T("★ Web videos") : FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
+        lib.Names = lib.Trees.Select(t => FolderScanner.FolderName(ContentResolver!, Uri.Parse(t)!)).ToArray();
         // Start with the playing list itself.
-        lib.Folder = currentTree is not null ? lib.Trees.IndexOf(currentTree) : Current is { IsRemote: true } ? lib.Trees.IndexOf(WebFolder) : -1;
+        lib.Folder = currentTree is not null ? lib.Trees.IndexOf(currentTree) : -1;
         lib.Items = _playlist.Items.ToList();
         RebuildLibraryView();
     }
@@ -753,13 +749,6 @@ public partial class PlayerActivity
         var cts = lib.Scan = new CancellationTokenSource();
         lib.Folder = index;
         lib.Page = 0;
-        if (lib.Trees[index] == WebFolder)
-        {
-            lib.Loading = false;
-            lib.Items = WebBookmarkItems.All(_settings.Bookmarks);
-            RebuildLibraryView();
-            return;
-        }
         lib.Loading = true;
         lib.Items = [];
         RebuildLibraryView();
@@ -866,9 +855,7 @@ public partial class PlayerActivity
             if (idx != _playlist.CurrentIndex) { SaveCurrentPosition(); _playlist.JumpTo(idx); OpenCurrent(); }
             return;
         }
-        // A saved web video keeps its page and remembered state.
-        var web = WebBookmarkItems.All(_settings.Bookmarks).FirstOrDefault(i => i.Location == uri);
-        PlayItems([web ?? new MediaItem(uri, _settings.LastVideoName ?? T("video"))], 0);
+        PlayItems([new MediaItem(uri, _settings.LastVideoName ?? T("video"))], 0);
     }
 
     // ---- Info ----

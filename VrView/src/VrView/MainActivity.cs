@@ -117,16 +117,6 @@ public class MainActivity : Activity
         row2.AddView(_repeatButton, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         root.AddView(row2);
 
-        var row3 = new LinearLayout(this) { Orientation = Orientation.Horizontal };
-        row3.AddView(MakeButton(T("🌐 Browser"), (_, _) => StartActivity(BrowserActivity.CreateIntent(this))),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
-        row3.AddView(MakeButton(T("🥽 VR browser"), (_, _) => StartActivity(VrBrowserActivity.CreateIntent(this))),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
-        row3.AddView(MakeButton(T("★ Web videos"), (_, _) =>
-                WebVideosDialog.Show(this, _settings, url => StartActivity(BrowserActivity.CreateIntent(this, url)))),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
-        root.AddView(row3);
-
         _viewerButton = MakeButton("", (_, _) => ViewerMenu());
         root.AddView(_viewerButton);
 
@@ -452,9 +442,7 @@ public class MainActivity : Activity
         if (uri is null) return;
         int idx = _items.FindIndex(i => i.Location == uri);
         if (idx >= 0) { Play(idx); return; }
-        // A saved web video keeps its page and remembered state.
-        var web = WebBookmarkItems.All(_settings.Bookmarks).FirstOrDefault(i => i.Location == uri);
-        var single = new List<MediaItem> { web ?? new(uri, _settings.LastVideoName ?? T("video")) };
+        var single = new List<MediaItem> { new(uri, _settings.LastVideoName ?? T("video")) };
         StartActivity(PlayerActivity.CreateIntent(this, single, 0));
     }
 }

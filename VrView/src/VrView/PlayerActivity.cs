@@ -31,12 +31,6 @@ namespace VrView;
 [IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "video/*")]
 public partial class PlayerActivity : Activity, VrRenderer.IHost
 {
-    private const string ExtraLocations = "vrview.locations";
-    private const string ExtraNames = "vrview.names";
-    private const string ExtraSizes = "vrview.sizes";
-    private const string ExtraStart = "vrview.start";
-    private const string ExtraPages = "vrview.pages";
-    private const string ExtraKeys = "vrview.keys";
     private const int TickMs = 250;
 
     private enum Source { Vr, Touch, Key }
@@ -53,6 +47,8 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
     private MediaSession? _session;
     private readonly Handler _handler = new(Looper.MainLooper!);
 
+    // Headers VrBrowser sent for its web videos (its cookies), by address.
+    private readonly Dictionary<string, Dictionary<string, string>> _webHeaders = new();
     private MediaPlayer? _player;
     private Surface? _surface;
     private SurfaceTexture? _videoTexture;
@@ -87,12 +83,12 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
     public static Intent CreateIntent(Context context, IList<MediaItem> items, int startIndex)
     {
         var intent = new Intent(context, typeof(PlayerActivity));
-        intent.PutExtra(ExtraLocations, items.Select(i => i.Location).ToArray());
-        intent.PutExtra(ExtraNames, items.Select(i => i.Name).ToArray());
-        intent.PutExtra(ExtraSizes, items.Select(i => i.SizeBytes).ToArray());
-        intent.PutExtra(ExtraPages, items.Select(i => i.PageUrl ?? "").ToArray());
-        intent.PutExtra(ExtraKeys, items.Select(i => i.StateKey ?? "").ToArray());
-        intent.PutExtra(ExtraStart, startIndex);
+        intent.PutExtra(AppLinks.ExtraLocations, items.Select(i => i.Location).ToArray());
+        intent.PutExtra(AppLinks.ExtraNames, items.Select(i => i.Name).ToArray());
+        intent.PutExtra(AppLinks.ExtraSizes, items.Select(i => i.SizeBytes).ToArray());
+        intent.PutExtra(AppLinks.ExtraPages, items.Select(i => i.PageUrl ?? "").ToArray());
+        intent.PutExtra(AppLinks.ExtraKeys, items.Select(i => i.StateKey ?? "").ToArray());
+        intent.PutExtra(AppLinks.ExtraStart, startIndex);
         return intent;
     }
 
@@ -207,23 +203,26 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         if (hasFocus) HideSystemUi();
     }
 
-    private static List<MediaItem> ReadItems(Intent? intent, out int start)
+    private List<MediaItem> ReadItems(Intent? intent, out int start)
     {
         start = 0;
         var items = new List<MediaItem>();
         if (intent is null) return items;
-        var locations = intent.GetStringArrayExtra(ExtraLocations);
-        var names = intent.GetStringArrayExtra(ExtraNames);
-        var sizes = intent.GetLongArrayExtra(ExtraSizes);
-        var pages = intent.GetStringArrayExtra(ExtraPages);
-        var keys = intent.GetStringArrayExtra(ExtraKeys);
+        var locations = intent.GetStringArrayExtra(AppLinks.ExtraLocations);
+        var names = intent.GetStringArrayExtra(AppLinks.ExtraNames);
+        var sizes = intent.GetLongArrayExtra(AppLinks.ExtraSizes);
+        var pages = intent.GetStringArrayExtra(AppLinks.ExtraPages);
+        var keys = intent.GetStringArrayExtra(AppLinks.ExtraKeys);
+        var headers = intent.GetStringArrayExtra(AppLinks.ExtraHeaders);
         static string? At(string[]? a, int i) => a is not null && i < a.Length && a[i] is { Length: > 0 } v ? v : null;
         if (locations is not null)
         {
             for (int i = 0; i < locations.Length; i++)
                 items.Add(new MediaItem(locations[i], names is not null && i < names.Length ? names[i] : F("video {0}", i + 1),
                     sizes is not null && i < sizes.Length ? sizes[i] : 0, At(pages, i), At(keys, i)));
-            start = intent.GetIntExtra(ExtraStart, 0);
+            for (int i = 0; i < locations.Length; i++)
+                if (At(headers, i) is { } h) _webHeaders[locations[i]] = AppLinks.DecodeHeaders(h);
+            start = intent.GetIntExtra(AppLinks.ExtraStart, 0);
         }
         else if (intent.Data is { } uri && Application.Context.ContentResolver is { } resolver)
         {
@@ -231,6 +230,26 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
             items.Add(new MediaItem(uri.ToString()!, FolderScanner.DisplayName(resolver, uri)));
         }
         return items;
+    }
+
+    /// <summary>
+    /// Headers for a web video: the ones VrBrowser sent (its cookies and agent), else the page as referrer
+    /// and the phone's browser agent, which many sites need.
+    /// </summary>
+    private IDictionary<string, string> WebHeadersFor(MediaItem item)
+    {
+        if (_webHeaders.TryGetValue(item.Location, out var sent)) return sent;
+        var headers = new Dictionary<string, string>();
+        try
+        {
+            if (Android.Webkit.WebSettings.GetDefaultUserAgent(this) is { Length: > 0 } agent) headers["User-Agent"] = agent;
+        }
+        catch (Java.Lang.Exception)
+        {
+            // No WebView installed: the player's own agent.
+        }
+        if (!string.IsNullOrEmpty(item.PageUrl)) headers["Referer"] = item.PageUrl;
+        return headers;
     }
 
     private void HideSystemUi()
@@ -370,7 +389,7 @@ public partial class PlayerActivity : Activity, VrRenderer.IHost
         };
         try
         {
-            if (item.IsRemote) mp.SetDataSource(this, Uri.Parse(item.Location)!, WebHeaders.For(this, item.Location, item.PageUrl));
+            if (item.IsRemote) mp.SetDataSource(this, Uri.Parse(item.Location)!, WebHeadersFor(item));
             else mp.SetDataSource(this, Uri.Parse(item.Location)!);
             mp.PrepareAsync();
         }

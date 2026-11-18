@@ -32,7 +32,7 @@ Tiene un botón opcional para invitar una cerveza con Google Play. El material p
 | Anti-deriva | La imagen ya no se recorre de lado con el tiempo: el giroscopio se corrige muy despacio con la brújula (ignorando saltos magnéticos) y se resta el error del giroscopio medido en reposo. Modos: anti-deriva, solo giroscopio, brújula. Medidor de «grados por minuto» y botón **Calibrar**. |
 | Marcas | **＋ Marca**, **◀ Marca / Marca ▶**, rayitas amarillas en la barra y ventana **Marcas** con miniaturas. Pueden tener **nombre** (botón «✎ Nombrar marca» en la pantalla táctil). |
 | Modo edición | Interruptor **✂ Editar / ✓ Terminar edición**. En edición se marcan las **partes a quitar** (en rojo en la barra) en lugar de marcas, con saltos de ±1 s y ventana **Cortes**. «Saltar cortes» permite ver cómo quedará el video. El corte real lo hace **VrCut** en la computadora, que además mueve las marcas para que sigan en la misma escena. |
-| Navegador y videos web | **🌐 Navegador** con sitios favoritos. Mientras una página reproduce un video, VrView detecta su dirección (MP4 o stream HLS) para verlo **en el visor de VrView** en vez del visor del sitio, guardarlo en **★ Videos web** (también aparecen en la Biblioteca del visor) o descargarlo. |
+| Videos web | Los reproduce cuando se los manda **VrBrowser**, la app de navegador (ver más abajo). |
 | Vista previa en la barra | Al mirar la barra de progreso aparece una miniatura del momento al que saltarías. |
 | Audio y subtítulos | Elegir pista de audio y subtítulos (los del video o un `.srt` con el mismo nombre al lado del video). Tamaño ajustable. |
 | Información | Archivo, tamaño, resolución, fps, códec y bits, velocidad, **decodificador por hardware o software**, cuadros mostrados por segundo, metadatos VR, formato y su origen, horizonte, marcas, dónde se guarda y estado del sensor. |
@@ -148,61 +148,12 @@ en lugar de sobrescribirlos.
 Para que VrCut vea los cortes, el video debe estar en una **carpeta elegida** en la lista (los videos
 abiertos con «Abrir con…» guardan sus datos dentro de la app).
 
-## Navegador: videos de sitios web en el visor de VrView
+## Videos de sitios web: VrBrowser
 
-Algunos sitios de videos VR tienen su propio visor web y no siempre dejan descargar el archivo. Con
-**🌐 Navegador** (en la pantalla de la lista) los abres dentro de VrView:
-
-- **☆ Sitio / ★ Sitio** guarda o quita la página de los favoritos; **★ Favoritos** los lista
-  (mantén pulsado uno para renombrarlo o borrarlo).
-- Reproduce el video en la página unos segundos y pulsa **🎬 Videos (n)**: aparecen las direcciones
-  de video que usó la página (archivos MP4/WebM/MOV y streams HLS `.m3u8`). Para cada uno:
-  **▶ Ver en el visor de VrView**, **★ Guardar en Videos web**, **⬇ Descargar** (solo archivos;
-  se guardan en *Descargas/VrView*, carpeta que luego puedes elegir en la lista) o copiar el enlace.
-  Si el sitio ofrece su propio botón de descarga, VrView también lo atiende.
-- Los **★ Videos web** guardados están en la pantalla de la lista y, dentro del visor, en la
-  **Biblioteca** como la carpeta «★ Videos web». Recuerdan posición, formato, marcas y horizonte
-  como cualquier video. Usa etiquetas en el nombre (`_180_LR`…) para que el formato salga solo.
-- Las direcciones de stream suelen **caducar**. Si un video guardado deja de cargar, mantenlo
-  pulsado en «★ Videos web» → **Abrir su página** y vuelve a reproducirlo o guardarlo: el enlace se
-  renueva y se conservan su nombre y lo recordado.
-
-Se envían las mismas cookies, agente y página de origen que usa el navegador, así que funcionan los
-sitios en los que inicias sesión. No funcionan los videos protegidos con DRM, los streams DASH
-(`.mpd`, el reproductor del sistema no los soporta) ni las transmisiones que el sitio arma por
-partes sin una dirección propia.
-
-## Navegador VR: la web flotando dentro del visor
-
-**🥽 Navegador VR** (en la pantalla de la lista, o **🥽 En VR** en el navegador del teléfono para
-seguir en la misma página) abre la web **dentro del visor**: la página flota frente a ti como una
-pantalla grande y, debajo, tiene una barra.
-
-- **Clic**: apunta con la retícula y pulsa el botón del visor (o toca la pantalla). Los botones de
-  la barra también se pulsan mirándolos, como en el resto de VrView.
-- **Barra**: ◀ Atrás, Adelante ▶, ⟳, **▲ Subir / ▼ Bajar** (desplaza la página o el recuadro que
-  está en medio), zoom − / ＋, Recentrar, **★ Favoritos** y **☆ Sitio**. También están
-  **🎬 Reproductor**, que abre en el reproductor de VrView el video que detectó la página, y
-  **📱 Pantalla del teléfono**, que vuelve al navegador normal para escribir una dirección o iniciar
-  sesión. Las sesiones y cookies son las mismas en los dos navegadores.
-- **Pantalla completa en VR**: el botón ⛶ del reproductor del sitio ya no manda el video a la
-  pantalla del teléfono, sino que lo muestra en el visor. **⛶ Video en VR** hace lo mismo con
-  cualquier video de la página, aunque el sitio no tenga pantalla completa. La página toma la forma
-  del video y se dibuja con el mismo motor del reproductor. En **Formato** eliges cómo se ve: pantalla
-  de cine (con **Pantalla grande**), 180°, 360°, ojo de pez o cubemap, en 2D o en 3D (lado a lado o
-  arriba-abajo). VrView recuerda el formato elegido para cada sitio. Si el título de la página trae
-  etiquetas (`180 SBS`, `360`…), lo toma solo.
-- En pantalla completa, un toque muestra u oculta la barra: ◀◀ 10 s, ▶/II, 10 s ▶▶, Recentrar,
-  Formato y ✕ Salir. La barra se oculta sola a los pocos segundos.
-- **Mando o teclado**: A / Enter = clic, B / Esc = atrás, ▲ / ▼ = desplazar, Y / R = recentrar,
-  L1 / F = entrar o salir de **⛶ Video en VR**, X / Menú = mostrar la barra, Espacio = ▶/II y, en
-  pantalla completa, ◀ / ▶ = 10 s atrás o adelante.
-
-Como se ve la imagen que dibuja la página, aquí sí se pueden ver videos que el reproductor del
-sistema no abre: los streams armados por partes o los de sitios que no dan la dirección del archivo.
-La calidad es la de la página (hasta 2048 px por el lado largo). Para la mejor calidad, saltos y
-marcas, usa **🎬 Reproductor** cuando esté disponible. Con el teléfono en el visor no se puede
-escribir: usa los favoritos o **📱 Pantalla del teléfono**.
+El navegador es una app aparte, **VrBrowser** ([`src/VrBrowser`](src/VrBrowser/README.md)): navega
+en el teléfono o con la página flotando dentro del visor, detecta los videos de las páginas y los
+manda al reproductor de VrView con las cookies del sitio. Usa la configuración del visor de VrView
+(perfil del QR, lentes, controles), así que el visor se configura una sola vez, aquí.
 
 ## El formato: dónde vive y cómo se decide
 
@@ -370,6 +321,7 @@ VrView/
 │   │   ├── CutList.cs           # cortes: unir, saltar al reproducir y reacomodar tiempos (Remap)
 │   │   ├── FolderSettingsLocator.cs # dónde está el vrview.json de un video (para VrCut)
 │   │   ├── WebMedia.cs          # detección de videos en páginas, favoritos web, direcciones
+│   │   ├── AppLinks.cs          # lo que se dicen VrView y VrBrowser (videos, cabeceras, ajustes)
 │   │   ├── FormatDetector.cs    # etiquetas del nombre y proporciones → formato
 │   │   ├── FormatResolver.cs    # video → perfil/carpeta → metadatos → etiquetas → proporción
 │   │   ├── VideoFormat.cs       # proyección, estéreo, ajuste fino, recorte por ojo
@@ -383,15 +335,15 @@ VrView/
 │   │   ├── SphericalMetadata.cs # st3d / sv3d / mallas mshp del MP4
 │   │   ├── ViewerProfile.cs     # perfil Cardboard (URL del QR) + QrDecoder.cs (ZXing.Net)
 │   │   └── VrMath.cs …          # sensor → cámara, recentrar, horizonte, proyección
-│   └── VrView/                 # net10.0-android: la app
-│       ├── MainActivity.cs      # carpeta, lista, continuar, perfil del visor por QR
-│       ├── PlayerActivity*.cs   # reproducción, ventanas y sus acciones, entrada, modo edición
-│       ├── BrowserActivity.cs   # navegador, favoritos, detección y descarga de videos
-│       ├── WebVideosDialog.cs, WebHeaders.cs  # videos web guardados; cookies y origen
-│       ├── HeadTracker.cs       # sensores con anti-deriva
-│       ├── VideoFrames.cs, LibraryThumbs.cs, MediaInfoReader.cs
-│       ├── WindowView.cs        # las ventanas en la pantalla táctil
-│       └── Gl/                  # renderizador OpenGL ES, shaders, pintor de ventanas
+│   ├── VrView/                 # net10.0-android: la app
+│   │   ├── MainActivity.cs      # carpeta, lista, continuar, perfil del visor por QR
+│   │   ├── PlayerActivity*.cs   # reproducción, ventanas y sus acciones, entrada, modo edición
+│   │   ├── SharedSettingsProvider.cs # da a VrBrowser la configuración del visor
+│   │   ├── HeadTracker.cs       # sensores con anti-deriva
+│   │   ├── VideoFrames.cs, LibraryThumbs.cs, MediaInfoReader.cs
+│   │   ├── WindowView.cs        # las ventanas en la pantalla táctil
+│   │   └── Gl/                  # renderizador OpenGL ES, shaders, pintor de ventanas
+│   └── VrBrowser/              # net10.0-android: el navegador (app aparte, comparte Gl/ y ajustes)
 └── tests/VrView.Core.Tests/    # xUnit
 ```
 
