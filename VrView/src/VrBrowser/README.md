@@ -45,7 +45,10 @@ página flota frente a ti como una pantalla grande y, debajo, tiene una barra. S
 navegador: enlaces, botones, menús, buscadores y formularios.
 
 - **Clic**: apunta con la retícula a cualquier elemento de la página (enlace, botón, casilla, campo
-  de texto) y pulsa el botón del visor, toca la pantalla o pulsa A en el mando. Los botones de la
+  de texto) y pulsa el botón del visor, toca la pantalla o pulsa A en el mando. Con el clic con la
+  mirada activado (en los ajustes de VrView), basta con mirar el enlace, botón o campo el tiempo de
+  espera: el anillo de la retícula se llena y hace clic una vez. Sobre texto, imágenes y videos no
+  hace clic, así que leer no activa nada. Los botones de la
   barra y del teclado también se pulsan mirándolos, como en el resto de VrView.
 - **Teclado en el visor**: al hacer clic en un campo de texto de la página se abre un teclado debajo
   de ella. Muestra lo que llevas escrito (con puntos si es una contraseña) y tiene ñ, números,

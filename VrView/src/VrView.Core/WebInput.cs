@@ -31,3 +31,12 @@ public static class WebInput
     public static string WithCaret(string text, int caret, string mark = "▏") =>
         caret < 0 || caret >= text.Length ? text + mark : text[..caret] + mark + text[caret..];
 }
+
+/// <summary>A point of the VR browser's page (0..1, origin top-left).</summary>
+public sealed record PagePoint(float X, float Y);
+
+/// <summary>The box of an element of the VR browser's page (0..1, origin top-left).</summary>
+public sealed record PageBox(float X0, float Y0, float X1, float Y1)
+{
+    public bool Contains(float x, float y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+}

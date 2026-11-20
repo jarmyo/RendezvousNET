@@ -18,4 +18,15 @@ public class WebInputTests
         Assert.Equal("abc▏", WebInput.WithCaret("abc", -1));
         Assert.Equal("abc▏", WebInput.WithCaret("abc", 9));
     }
+
+    [Fact]
+    public void Page_box_contains_its_edges_only()
+    {
+        var box = new PageBox(0.2f, 0.3f, 0.4f, 0.5f);
+        Assert.True(box.Contains(0.3f, 0.4f));
+        Assert.True(box.Contains(0.2f, 0.5f));
+        Assert.False(box.Contains(0.1f, 0.4f));
+        Assert.False(box.Contains(0.3f, 0.6f));
+        Assert.Equal(box, new PageBox(0.2f, 0.3f, 0.4f, 0.5f)); // a new lookup of the same element keeps the dwell going
+    }
 }

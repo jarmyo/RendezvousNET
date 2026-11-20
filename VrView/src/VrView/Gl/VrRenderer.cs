@@ -75,6 +75,17 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
     public volatile Action<float, float>? ContentClick;
     /// <summary>When set (degrees), windows sit straight under the picture at this pitch instead of where the user looks.</summary>
     public volatile float AnchoredWindowPitch = float.NaN;
+    /// <summary>VR browser: where the reticle is on the page (0..1), or null when it is not on the page. GL thread writes.</summary>
+    public volatile PagePoint? ContentGaze;
+    /// <summary>
+    /// VR browser: the clickable element of the page under the reticle (its box, 0..1), found by the page's script,
+    /// or null. Looking at it for the dwell time clicks it, like a button of the windows.
+    /// </summary>
+    public volatile PageBox? ContentTarget;
+
+    private PageBox? _dwellBox;
+    private float _pageDwellSeconds;
+    private bool _pageDwellFired;
 
     private volatile bool _recenterRequested, _recenterPitchToo;
     private volatile bool _frameAvailable;
@@ -420,7 +431,8 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             {
                 DrawTextured(_panelMesh!, _panelTexture, panelModel * view * menuProj, panelAlpha);
                 if (previewVisible) DrawTextured(_previewMesh!, _previewTexture, PreviewModel(scale) * view * menuProj, 1f);
-                DrawReticle(menuProj, v.GazeClick ? _dwell.Progress : 0f, _hovered >= 0);
+                DrawReticle(menuProj, v.GazeClick ? Math.Max(_dwell.Progress, PageDwellProgress(cfg)) : 0f,
+                    _hovered >= 0 || _dwellBox is not null);
             }
             else if (_capturing)
             {
@@ -495,6 +507,7 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
         {
             _hovered = -1;
             SeekHover = -1;
+            UpdatePageDwell(null, cfg, dt);
             if (_capturing) return;
             // Head gesture: looking straight down for a moment opens the menu.
             if (_hasPose && cfg.View.StereoView && cfg.View.LookDownMenu && VrMath.PitchOf(forward) < LookDownOpenAngle)
@@ -535,7 +548,32 @@ internal sealed class VrRenderer : Java.Lang.Object, GLSurfaceView.IRenderer
             _idleSeconds = 0;
             _host.OnMenuAction(hit.Action, hit.Fraction, hit.Arg);
         }
+        UpdatePageDwell(hit.Action == MenuAction.None ? forward : (Vector3?)null, cfg, dt);
     }
+
+    /// <summary>VR browser: looking at a link, button or field of the page for the dwell time clicks it (once).</summary>
+    private void UpdatePageDwell(Vector3? forward, RenderConfig cfg, float dt)
+    {
+        var page = ContentClick is not null && forward is { } f ? ContentHit(f, cfg) : null;
+        ContentGaze = page is { } g ? new PagePoint(g.X, g.Y) : null;
+        var box = page is { } p && ContentTarget is { } t && t.Contains(p.X, p.Y) ? t : null;
+        if (box is null || !cfg.View.GazeClick || box != _dwellBox)
+        {
+            _dwellBox = box;
+            _pageDwellSeconds = 0;
+            _pageDwellFired = false;
+            return;
+        }
+        if (_pageDwellFired) return;
+        _pageDwellSeconds += dt;
+        if (_pageDwellSeconds < cfg.View.DwellSeconds) return;
+        _pageDwellFired = true;
+        _pageDwellSeconds = 0;
+        ContentClick?.Invoke(page!.Value.X, page.Value.Y);
+    }
+
+    private float PageDwellProgress(RenderConfig cfg) => _dwellBox is null || _pageDwellFired ? 0f
+        : Math.Clamp(_pageDwellSeconds / Math.Max(cfg.View.DwellSeconds, 0.1f), 0f, 1f);
 
     private void UpdateHorizonCapture(Matrix4x4 view, RenderConfig cfg, float dt)
     {

@@ -34,6 +34,8 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
     private const string ExtraUrl = "vrview.url";
     private const string HomeUrl = "https://www.google.com";
     private const int TickMs = 500;
+    /// <summary>How often the element under the reticle is looked up, for the click by looking.</summary>
+    private const int HoverMs = 150;
     // The page as a 16:10 screen; at this density sites use their desktop-like layout with readable text.
     private const int PageWidth = 1280, PageHeight = 800, PageDpi = 180;
     private const int VideoLongSide = 2048, VideoDpi = 240;
@@ -102,6 +104,23 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         "if(e.multiple)e.options[i].selected=!e.options[i].selected;else e.selectedIndex=i;" +
         "e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));" +
         "return vrvOpts(e);})(" + index + ")";
+
+    // The clickable element under the reticle (link, button, field, list, or anything the page made clickable),
+    // as its box in the visible page (0..1); null over text, pictures, videos and frames, so reading never clicks.
+    private static string HoverJs(float u, float v) => "(function(u,v){" +
+        "var w=window.visualViewport,ox=w?w.offsetLeft:0,oy=w?w.offsetTop:0,W=w?w.width:innerWidth,H=w?w.height:innerHeight;" +
+        "var x=ox+u*W,y=oy+v*H,e=document.elementFromPoint(x,y);" +
+        "while(e&&e.shadowRoot){var n=e.shadowRoot.elementFromPoint(x,y);if(!n||n===e)break;e=n;}" +
+        "function ptr(n){try{return getComputedStyle(n).cursor==='pointer';}catch(z){return false;}}" +
+        "for(var i=0;e&&i<12;i++){var t=e.tagName;if(!t||t==='BODY'||t==='HTML')break;" +
+        "if(t==='VIDEO'||t==='IFRAME'||t==='FRAME'||t==='EMBED'||t==='OBJECT')return null;" +
+        "var r=(e.getAttribute('role')||'').toLowerCase(),p=e.parentElement;" +
+        "var c=(t==='A'&&e.hasAttribute('href'))||/^(BUTTON|SELECT|TEXTAREA|SUMMARY|LABEL)$/.test(t)||(t==='INPUT'&&e.type!=='hidden')||" +
+        "/^(button|link|tab|menuitem|checkbox|radio|option|switch|combobox|textbox|searchbox)$/.test(r)||e.hasAttribute('onclick')||" +
+        "(e.isContentEditable&&!(p&&p.isContentEditable))||(ptr(e)&&!(p&&ptr(p)));" +
+        "if(c){if(e.disabled)return null;var b=e.getBoundingClientRect();if(b.width*b.height>0.5*W*H)return null;" +
+        "return [(b.left-ox)/W,(b.top-oy)/H,(b.right-ox)/W,(b.bottom-oy)/H];}" +
+        "e=p||(e.getRootNode&&e.getRootNode().host)||null;}return null;})(" + Inv(u) + "," + Inv(v) + ")";
 
     private static string Inv(float f) => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -262,6 +281,8 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         _web.Web.OnResume();
         _handler.RemoveCallbacks(Tick);
         _handler.PostDelayed(Tick, TickMs);
+        _handler.RemoveCallbacks(HoverTick);
+        _handler.PostDelayed(HoverTick, HoverMs);
     }
 
     protected override void OnPause()
@@ -269,6 +290,7 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         if (_ready)
         {
             _handler.RemoveCallbacks(Tick);
+            _handler.RemoveCallbacks(HoverTick);
             _tracker.Stop();
             _glView.OnPause();
             _web.Web.OnPause();
@@ -406,6 +428,31 @@ public class VrBrowserActivity : Activity, VrRenderer.IHost
         else PollField();
         RefreshWindow();
         _handler.PostDelayed(Tick, TickMs);
+    }
+
+    /// <summary>Finds the clickable element under the reticle, so looking at it clicks it (see the renderer).</summary>
+    private void HoverTick()
+    {
+        if (IsDestroyed) return;
+        if (_fullscreen || !_settings.GazeClick || _renderer.ContentGaze is not { } gaze) _renderer.ContentTarget = null;
+        else _web.Web.EvaluateJavascript(HoverJs(gaze.X, gaze.Y), new JsResult(r => _renderer.ContentTarget = _fullscreen ? null : ParseBox(r)));
+        _handler.PostDelayed(HoverTick, HoverMs);
+    }
+
+    private static PageBox? ParseBox(string? json)
+    {
+        if (string.IsNullOrEmpty(json) || json == "null") return null;
+        try
+        {
+            var r = JsonDocument.Parse(json).RootElement;
+            if (r.ValueKind != JsonValueKind.Array || r.GetArrayLength() != 4) return null;
+            float F(int i) => (float)r[i].GetDouble();
+            return new PageBox(F(0), F(1), F(2), F(3));
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return null;
+        }
     }
 
     private void OnVideoState(string? result)
